@@ -50,11 +50,12 @@ LEVEL_COLS = ["工種", "種別", "細別", "名称"]
 OUT_COLS = ["工事名", "工種", "種別", "細別", "名称", "規格", "単位", "数量（今回）"]
 
 # スタイル定数
-HEADER_BG  = "1F4E79"
-HEADER_FG  = "FFFFFF"
-SECTION_BG = "D6E4F0"
-MIN_WIDTH  = 8
-MAX_WIDTH  = 60
+HEADER_BG   = "D1D1D1"   # グレースケール82%
+HEADER_FG   = "000000"   # 黒文字
+SECTION_BG  = "F0F0F0"   # 薄いグレー
+FONT_NAME   = "MS Mincho"
+MIN_WIDTH   = 8
+MAX_WIDTH   = 60
 
 
 def _clean(val) -> str:
@@ -269,7 +270,7 @@ def write_suryo_excel(df: pd.DataFrame, output_path: Optional[str] = None) -> by
     thin = Side(style="thin", color="AAAAAA")
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
 
-    header_font  = Font(bold=True, color=HEADER_FG, size=10)
+    header_font  = Font(name=FONT_NAME, bold=True, color=HEADER_FG, size=10)
     header_fill  = PatternFill("solid", fgColor=HEADER_BG)
     header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
     data_align   = Alignment(vertical="top", wrap_text=True)
@@ -295,6 +296,7 @@ def write_suryo_excel(df: pd.DataFrame, output_path: Optional[str] = None) -> by
 
         for col_idx, value in enumerate(row, start=1):
             cell = ws.cell(row=row_idx, column=col_idx, value=str(value) if value else "")
+            cell.font      = Font(name=FONT_NAME, size=10)
             cell.alignment = data_align
             cell.border    = border
             if use_fill:

@@ -20,16 +20,17 @@ SHEET_DEKIGATA  = "出来形管理基準及び規格値一覧"
 SHEET_PHOTO     = "撮影箇所一覧表"
 
 # ===== スタイル定数 =====
-HEADER_BG_COLOR  = "1F4E79"   # 濃い青
-HEADER_FONT_COLOR = "FFFFFF"  # 白文字
-SECTION_BG_COLOR = "D6E4F0"   # 薄い青（セクション区切り行）
+HEADER_BG_COLOR  = "D1D1D1"   # グレースケール82%
+HEADER_FONT_COLOR = "000000"  # 黒文字
+SECTION_BG_COLOR = "F0F0F0"   # 薄いグレー（セクション区切り行）
+FONT_NAME        = "MS Mincho" # 出力フォント
 MAX_COL_WIDTH    = 50          # 列幅の上限（文字数相当）
 MIN_COL_WIDTH    = 8           # 列幅の下限
 
 
 def _make_header_style() -> tuple:
     """ヘッダー行用スタイルを返す。"""
-    font  = Font(bold=True, color=HEADER_FONT_COLOR, size=10)
+    font  = Font(name=FONT_NAME, bold=True, color=HEADER_FONT_COLOR, size=10)
     fill  = PatternFill("solid", fgColor=HEADER_BG_COLOR)
     align = Alignment(horizontal="center", vertical="center", wrap_text=True)
     return font, fill, align
@@ -82,6 +83,7 @@ def _write_sheet(ws, df: pd.DataFrame, section_col: Optional[str] = None) -> Non
             if pd.isna(value) if not isinstance(value, str) else False:
                 value = ""
             cell = ws.cell(row=row_idx, column=col_idx, value=str(value) if value != "" else "")
+            cell.font      = Font(name=FONT_NAME, size=10)
             cell.alignment = data_align
             cell.border    = thin_border
             if use_section_fill:
