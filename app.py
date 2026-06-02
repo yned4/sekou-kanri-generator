@@ -35,7 +35,7 @@ from build_db import (
 # ===========================================================================
 st.set_page_config(
     page_title="施工管理計画 自動生成",
-    page_icon="📋",
+    page_icon="☐",
     layout="wide",
 )
 
@@ -46,116 +46,169 @@ st.markdown("""
 <style>
 /* ─── フォント: 游ゴシック ─────────────────────────────── */
 html, body, [class*="css"], .stMarkdown, .stText,
-button, input, select, textarea, th, td {
+button, input, select, textarea, th, td, p, span, div, caption {
     font-family: 'Yu Gothic', '游ゴシック', YuGothic,
                  'Hiragino Kaku Gothic ProN', 'Hiragino Sans',
                  Meiryo, sans-serif !important;
 }
 
 /* ─── ページ背景 ────────────────────────────────────────── */
-.stApp { background-color: #F7FAFD; }
+.stApp { background-color: #F4F7FB; }
 
 /* ─── メトリクスカード ─────────────────────────────────── */
 [data-testid="metric-container"] {
     background: #FFFFFF;
-    border: 1px solid #C8DCF0;
+    border: 1px solid #D0DFF0;
     border-top: 3px solid #1565C0;
-    border-radius: 6px;
+    border-radius: 4px;
     padding: 14px 18px;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
 [data-testid="stMetricLabel"] > div {
-    font-size: 0.72rem !important;
+    font-size: 0.70rem !important;
     font-weight: 700 !important;
-    color: #4A6FA5 !important;
-    letter-spacing: 0.06em;
+    color: #5B7FA6 !important;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
 }
 [data-testid="stMetricValue"] > div {
-    font-size: 1.7rem !important;
+    font-size: 1.65rem !important;
     font-weight: 700 !important;
-    color: #1F4E79 !important;
+    color: #0D2B4E !important;
 }
 
 /* ─── プライマリボタン ─────────────────────────────────── */
 .stButton > button[kind="primary"] {
-    background: linear-gradient(135deg, #1565C0 0%, #1976D2 100%);
+    background: #1565C0;
     color: #FFFFFF;
     border: none;
-    border-radius: 6px;
+    border-radius: 4px;
     font-weight: 700;
-    letter-spacing: 0.04em;
-    box-shadow: 0 2px 8px rgba(21,101,192,0.30);
-    transition: box-shadow 0.2s, transform 0.15s;
+    letter-spacing: 0.05em;
+    box-shadow: 0 2px 6px rgba(21,101,192,0.28);
+    transition: background 0.15s, box-shadow 0.15s, transform 0.1s;
 }
 .stButton > button[kind="primary"]:hover {
-    box-shadow: 0 4px 14px rgba(21,101,192,0.45);
+    background: #0D47A1;
+    box-shadow: 0 4px 12px rgba(21,101,192,0.40);
     transform: translateY(-1px);
 }
-
-/* ─── セカンダリボタン ─────────────────────────────────── */
-.stButton > button[kind="secondary"] {
-    border: 1.5px solid #1565C0;
-    color: #1565C0;
-    border-radius: 6px;
-    font-weight: 600;
+.stButton > button[kind="primary"]:disabled {
+    background: #90A4AE !important;
+    box-shadow: none !important;
+    transform: none !important;
 }
 
 /* ─── ダウンロードボタン ───────────────────────────────── */
 [data-testid="stDownloadButton"] > button {
-    background: #E3F2FD !important;
+    background: #FFFFFF !important;
     color: #1565C0 !important;
-    border: 2px solid #1565C0 !important;
-    border-radius: 6px !important;
+    border: 1.5px solid #1565C0 !important;
+    border-radius: 4px !important;
     font-weight: 700 !important;
+    letter-spacing: 0.03em;
 }
 
-/* ─── info/success ボックス ────────────────────────────── */
+/* ─── info / success ───────────────────────────────────── */
 [data-testid="stInfo"] {
     background: #EBF3FD;
     border-left: 4px solid #1565C0;
-    border-radius: 0 6px 6px 0;
-    color: #1A2332;
+    border-radius: 0 4px 4px 0;
+    color: #1A2B3C;
 }
 [data-testid="stSuccess"] {
-    border-radius: 6px;
+    background: #E8F5E9;
+    border-radius: 4px;
+    color: #1B4332;
 }
 
 /* ─── サイドバー ───────────────────────────────────────── */
 [data-testid="stSidebar"] {
     background: #0C2340;
-    border-right: 1px solid #1A3A5C;
+    border-right: 1px solid #163758;
 }
-[data-testid="stSidebar"] * { color: #D0E4F7 !important; }
+[data-testid="stSidebar"] * {
+    color: #C8DEF5 !important;
+}
+[data-testid="stSidebar"] strong,
+[data-testid="stSidebar"] b {
+    color: #E8F2FC !important;
+}
 [data-testid="stSidebar"] h3 {
-    color: #7EB8E8 !important;
-    font-size: 0.75rem !important;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
+    color: #6AAEE0 !important;
+    font-size: 0.72rem !important;
+    letter-spacing: 0.14em !important;
+    text-transform: uppercase !important;
     font-weight: 700 !important;
+    margin-top: 4px !important;
 }
-[data-testid="stSidebar"] hr { border-color: #1E3F60 !important; }
-[data-testid="stSidebar"] .stButton > button {
-    background: #1565C0 !important;
-    color: #FFFFFF !important;
-    border: none !important;
-    border-radius: 6px !important;
-    font-weight: 700 !important;
+[data-testid="stSidebar"] hr {
+    border-color: #1E4060 !important;
 }
+/* サイドバー内コードブロック */
+[data-testid="stSidebar"] code {
+    background: #163758 !important;
+    color: #7EC8E3 !important;
+    border: 1px solid #1E4A72 !important;
+    padding: 1px 6px !important;
+    border-radius: 3px !important;
+    font-family: 'SFMono-Regular', Consolas, 'Courier New', monospace !important;
+    font-size: 0.82rem !important;
+}
+/* サイドバー エクスパンダー */
+[data-testid="stSidebar"] [data-testid="stExpander"] {
+    background: #0F2D4A !important;
+    border: 1px solid #1E4A72 !important;
+    border-radius: 4px !important;
+}
+[data-testid="stSidebar"] [data-testid="stExpander"] summary {
+    color: #A0C8E8 !important;
+    font-weight: 600 !important;
+    font-size: 0.85rem !important;
+}
+[data-testid="stSidebar"] [data-testid="stExpander"] p,
+[data-testid="stSidebar"] [data-testid="stExpander"] li,
+[data-testid="stSidebar"] [data-testid="stExpander"] span {
+    color: #B8D4EC !important;
+    font-size: 0.83rem !important;
+    line-height: 1.7 !important;
+}
+[data-testid="stSidebar"] [data-testid="stExpander"] strong {
+    color: #D8ECFA !important;
+}
+[data-testid="stSidebar"] [data-testid="stExpander"] hr {
+    border-color: #1E4060 !important;
+    margin: 8px 0 !important;
+}
+/* サイドバー ファイルアップローダー */
 [data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] {
     background: #0F2D4A !important;
-    border: 1.5px dashed #2E6DA4 !important;
-    border-radius: 8px !important;
+    border: 1.5px dashed #2A6496 !important;
+    border-radius: 6px !important;
+}
+/* サイドバー プライマリボタン */
+[data-testid="stSidebar"] .stButton > button[kind="primary"] {
+    background: #1565C0 !important;
+    color: #FFFFFF !important;
 }
 
-/* ─── ラジオボタン ─────────────────────────────────────── */
-[data-testid="stRadio"] label { font-size: 0.85rem; }
-
-/* ─── チェックボックス ─────────────────────────────────── */
-[data-testid="stCheckbox"] label { font-size: 0.85rem; }
+/* ─── ラジオ・チェックボックス ─────────────────────────── */
+[data-testid="stRadio"] label,
+[data-testid="stCheckbox"] label {
+    font-size: 0.85rem;
+}
 
 /* ─── divider ──────────────────────────────────────────── */
 hr { border-color: #D0DFF0 !important; }
+
+/* ─── テーブルヘッダー ─────────────────────────────────── */
+thead tr th {
+    background: #1F4E79 !important;
+    color: #FFFFFF !important;
+    font-weight: 700 !important;
+    font-size: 0.82rem !important;
+    letter-spacing: 0.04em !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -181,7 +234,7 @@ kojyo_data, version_info = load_kojyo_db()
 if kojyo_data is None:
     st.error(
         "国交省基準データベースが見つかりません。\n"
-        "先に `python build_db.py` を実行してください。"
+        "先に python build_db.py を実行してください。"
     )
     st.stop()
 
@@ -228,45 +281,58 @@ def _depth(row) -> int:
     return d
 
 
-def _sec_header(label: str) -> None:
-    """ブルー左ボーダー付きセクションヘッダーを描画する。"""
+def _sec_header(num: str, label: str) -> None:
+    """番号付きセクションヘッダーを描画する。"""
     st.markdown(
-        f'<div style="border-left:4px solid #1565C0; padding:5px 12px; '
-        f'background:#EBF3FD; border-radius:0 6px 6px 0; '
-        f'font-weight:700; color:#1F4E79; margin:10px 0 6px 0; '
-        f'font-size:0.95rem; letter-spacing:0.02em;">{label}</div>',
+        f'<div style="display:flex; align-items:center; gap:10px; '
+        f'margin:14px 0 6px 0;">'
+        f'<span style="background:#1565C0; color:#FFFFFF; '
+        f'font-size:0.72rem; font-weight:700; letter-spacing:0.08em; '
+        f'padding:3px 8px; border-radius:3px;">{num}</span>'
+        f'<span style="font-weight:700; color:#0D2B4E; font-size:0.95rem; '
+        f'letter-spacing:0.02em;">{label}</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def _subsection_label(color: str, label: str) -> None:
+    """候補選択内の小見出しを描画する。"""
+    st.markdown(
+        f'<div style="border-left:3px solid {color}; padding:2px 8px; '
+        f'font-weight:700; font-size:0.85rem; color:#1A2B3C; '
+        f'margin-bottom:6px;">{label}</div>',
         unsafe_allow_html=True,
     )
 
 
 # ===========================================================================
-# サイドバー: DB情報 + アップロード + 利用説明
+# サイドバー
 # ===========================================================================
 with st.sidebar:
-    # ── ロゴ風ヘッダー ──────────────────────────────────────
+    # ── ヘッダー ─────────────────────────────────────────────
     st.markdown(
-        '<div style="padding:12px 0 8px 0; text-align:center;">'
-        '<span style="font-size:1.6rem;">📋</span><br>'
-        '<span style="font-size:0.95rem; font-weight:700; '
-        'color:#A8D4F5; letter-spacing:0.06em;">施工管理計画</span><br>'
-        '<span style="font-size:0.7rem; color:#5A88B0; letter-spacing:0.1em;">'
-        'AUTO GENERATOR</span></div>',
+        '<div style="padding:16px 0 10px 0; text-align:center; '
+        'border-bottom:1px solid #1E4060; margin-bottom:12px;">'
+        '<div style="font-size:1.05rem; font-weight:700; color:#A8D4F5; '
+        'letter-spacing:0.08em;">施工管理計画</div>'
+        '<div style="font-size:0.65rem; color:#4A7CA0; letter-spacing:0.18em; '
+        'margin-top:3px;">AUTO GENERATION SYSTEM</div>'
+        '</div>',
         unsafe_allow_html=True,
     )
-    st.divider()
 
     # ── DB情報 ───────────────────────────────────────────────
-    st.markdown("### 📚 国交省基準DB")
-    st.caption(f"バージョン: **{version_info.get('バージョン', '不明')}**")
-    st.caption(f"作成日時: {version_info.get('作成日時', '不明')}")
+    st.markdown("### 国交省基準 DB")
+    st.caption(f"Ver. {version_info.get('バージョン', '不明')}　／　{version_info.get('作成日時', '不明')}")
     st.caption(
-        f"出来形管理 {len(kojyo_data['出来形管理'])}行 ／ "
-        f"品質管理 {len(kojyo_data['品質管理'])}行"
+        f"出来形管理 {len(kojyo_data['出来形管理'])} 行　"
+        f"品質管理 {len(kojyo_data['品質管理'])} 行"
     )
     st.divider()
 
     # ── アップロード ─────────────────────────────────────────
-    st.markdown("### 📄 数量総括表 PDF")
+    st.markdown("### 数量総括表 PDF")
     uploaded_file = st.file_uploader(
         "PDFをアップロード", type="pdf", label_visibility="collapsed"
     )
@@ -298,75 +364,68 @@ with st.sidebar:
 
         except Exception:
             st.error("解析中にエラーが発生しました。")
-            with st.expander("詳細（開発者向け）"):
+            with st.expander("エラー詳細"):
                 st.code(traceback.format_exc())
 
     st.divider()
 
     # ── 利用説明書 ───────────────────────────────────────────
-    with st.expander("📖 利用説明書"):
+    with st.expander("利用説明書"):
         st.markdown("""
-**STEP 1 — PDFをアップロード**
-数量総括表のPDFファイルを上の枠にドラッグ＆ドロップし、「解析する」を押します。
+**STEP 1 — PDF アップロード**
+数量総括表のPDFを上枠にドロップし「解析する」を押します。
 
----
-
-**STEP 2 — ① 数量総括表を確認**
+**STEP 2 — 数量総括表を確認**
 抽出された工種ツリーが表示されます。行の背景色で状態を確認できます。
-- 🟡 **候補あり** — 国交省基準DBにマッチした行
-- 🟢 **選択済み** — 候補を確認・選択済みの行
-- ⬜ **対象外** — DBマッチなし
+- 黄：候補あり（未選択）
+- 緑：選択済み
+- 灰：対象外
 
----
+**STEP 3 — DB マッピングを確認**
+各工種に対する出来形・品質管理・撮影箇所のマッチ結果を確認します。フィルタで絞り込み可能です。
 
-**STEP 3 — ② DBマッピングを確認**
-各工種に対する出来形・品質管理・撮影箇所のマッチ結果を確認します。
-フィルタで「候補ありのみ」などに絞り込めます。
-
----
-
-**STEP 4 — ③ 候補を選択**
-② の表から行をクリックすると、その行の詳細候補がチェックボックスで表示されます。
-不要な候補のチェックを外して絞り込みます。
-
----
+**STEP 4 — 候補を選択**
+表の行をクリックすると候補がチェックボックスで表示されます。不要な候補は外してください。
 
 **STEP 5 — 出力**
-右側の「📥 施工管理計画を出力」ボタンを押すとExcelを生成します。
-3シート構成（出来形管理 ／ 品質管理 ／ 撮影箇所）でダウンロードできます。
+「施工管理計画を出力」ボタンで Excel を生成します。出来形管理・品質管理・撮影箇所の3シート構成でダウンロードできます。
 
 ---
 
-**基準DB更新時**
-国交省基準改定時は `python build_db.py` を再実行してDBを更新してください。
+基準DB更新時は `build_db.py` を再実行してください。
 """)
-
-    st.caption("基準改定時は `python build_db.py` を実行")
 
 # ===========================================================================
 # ヘッダー
 # ===========================================================================
 st.markdown(
-    '<div style="background:linear-gradient(135deg,#0C2340 0%,#1565C0 100%); '
-    'color:#FFFFFF; padding:16px 24px; border-radius:8px; margin-bottom:4px;">'
-    '<span style="font-size:1.25rem; font-weight:700; letter-spacing:0.06em;">'
-    '📋 施工管理計画 自動生成アプリ</span><br>'
-    '<span style="font-size:0.78rem; color:#A8CCEF;">'
-    '数量総括表 PDF → 国交省基準 DBマッピング → 施工管理計画 Excel 出力</span>'
-    '</div>',
+    '<div style="background:linear-gradient(135deg, #0C2340 0%, #1565C0 100%); '
+    'color:#FFFFFF; padding:18px 28px; border-radius:6px; margin-bottom:6px;">'
+    '<div style="font-size:1.2rem; font-weight:700; letter-spacing:0.06em; '
+    'color:#FFFFFF;">施工管理計画 自動生成システム</div>'
+    '<div style="font-size:0.78rem; color:#9DC8EF; margin-top:4px; letter-spacing:0.03em;">'
+    '数量総括表 PDF  →  国交省基準 DB マッピング  →  施工管理計画 Excel 出力'
+    '</div></div>',
     unsafe_allow_html=True,
 )
 
 if st.session_state.suryo_info:
     name = st.session_state.suryo_info.get("工事名", "")
-    st.success(f"📄 **{name or '（工事名不明）'}**　 読込済み")
+    st.markdown(
+        f'<div style="background:#E8F5E9; border:1px solid #A5D6A7; '
+        f'border-radius:4px; padding:8px 16px; margin:4px 0 0 0; '
+        f'font-size:0.88rem; color:#1B4332;">'
+        f'<strong>{name or "（工事名不明）"}</strong>　　読込済み'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
 # ===========================================================================
 # 未解析時
 # ===========================================================================
 if st.session_state.df_match is None:
     st.divider()
-    st.info("⬅️ サイドバーから数量総括表PDFをアップロードして「解析する」を押してください。")
+    st.info("← サイドバーから数量総括表PDFをアップロードして「解析する」を押してください。")
     st.stop()
 
 # ===========================================================================
@@ -402,10 +461,10 @@ n_out      = (df_raw["状態"] == "対象外").sum()
 # ===========================================================================
 st.divider()
 mc = st.columns(4)
-mc[0].metric("総行数",             n_total)
-mc[1].metric("✅ 選択済み",        n_selected)
-mc[2].metric("⚠️ 候補あり（未選択）", n_pending)
-mc[3].metric("➖ 対象外",          n_out)
+mc[0].metric("総行数",    n_total)
+mc[1].metric("選択済み",  n_selected)
+mc[2].metric("候補あり",  n_pending)
+mc[3].metric("対象外",    n_out)
 st.divider()
 
 STATUS_BG = {"選択済み": "#E8F5E9", "候補あり": "#FFF9C4", "対象外": "#F5F5F5"}
@@ -419,10 +478,10 @@ def _row_style(statuses: dict):
 
 
 # ===========================================================================
-# ① 数量総括表ツリー（フルワイド）
+# 01  数量総括表ツリー
 # ===========================================================================
-_sec_header("① 数量総括表（元データ）")
-st.caption("※「直接工事費」以下は除外済み　　行をクリック → 下部③に詳細・候補が表示されます")
+_sec_header("01", "数量総括表（元データ）")
+st.caption("「直接工事費」以下は除外済み　　行をクリックすると下部に候補が表示されます")
 
 statuses_tree = df_raw["状態"].reset_index(drop=True).to_dict()
 df_tree = pd.DataFrame({
@@ -447,12 +506,22 @@ ev_l = st.dataframe(
 if ev_l.selection.rows:
     st.session_state.selected_idx = ev_l.selection.rows[0]
 
-st.caption("🟢 選択済み　　🟡 候補あり（未選択）　　⬜ 対象外")
+st.markdown(
+    '<div style="font-size:0.78rem; color:#5B7FA6; margin-top:4px;">'
+    '<span style="background:#FFF9C4; border:1px solid #DDD; padding:1px 7px; '
+    'border-radius:3px; margin-right:8px;">候補あり</span>'
+    '<span style="background:#E8F5E9; border:1px solid #DDD; padding:1px 7px; '
+    'border-radius:3px; margin-right:8px;">選択済み</span>'
+    '<span style="background:#F5F5F5; border:1px solid #DDD; padding:1px 7px; '
+    'border-radius:3px;">対象外</span>'
+    '</div>',
+    unsafe_allow_html=True,
+)
 
 # ===========================================================================
-# ② DBマッピング一覧（フルワイド）
+# 02  DB マッピング一覧
 # ===========================================================================
-_sec_header("② DBマッピング一覧")
+_sec_header("02", "DB マッピング一覧")
 
 filter_opt = st.radio(
     "フィルタ",
@@ -512,13 +581,13 @@ if ev_m.selection.rows:
 st.divider()
 
 # ===========================================================================
-# ③ + ④ 下部 2カラム: 候補選択（左）+ 出力（右）
+# 03 + 04  下部 2カラム
 # ===========================================================================
 col_detail, col_out = st.columns([3, 2])
 
-# ── ③ 左: 選択行の詳細・候補選択 ─────────────────────────────────────
+# ── 03  候補選択 ────────────────────────────────────────────────────────
 with col_detail:
-    _sec_header("③ 候補選択")
+    _sec_header("03", "候補選択")
 
     sel_idx = st.session_state.selected_idx
 
@@ -527,7 +596,15 @@ with col_detail:
         ckey = _chain_key(sel)
 
         chain = " › ".join(sel[c] for c in SURYO_LEVEL_COLS if sel.get(c, ""))
-        st.info(f"**{sel['_name']}**　　{chain}")
+        st.markdown(
+            f'<div style="background:#EBF3FD; border-left:4px solid #1565C0; '
+            f'border-radius:0 4px 4px 0; padding:8px 14px; margin-bottom:10px; '
+            f'font-size:0.88rem; color:#0D2B4E;">'
+            f'<strong>{sel["_name"]}</strong><br>'
+            f'<span style="font-size:0.78rem; color:#4A6FA5;">{chain}</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
         match_d = str(sel.get("出来形マッチ", "")).strip()
         match_h = str(sel.get("品質管理マッチ", "")).strip()
@@ -547,47 +624,47 @@ with col_detail:
             with c_d:
                 sel_d = []
                 if items_d:
-                    st.markdown("🔵 **出来形管理**")
+                    _subsection_label("#1565C0", "出来形管理")
                     grouped_d = _group_items(items_d)
                     for kojyo, sub_items in grouped_d.items():
                         if len(grouped_d) > 1:
-                            st.caption(f"■ {kojyo}")
+                            st.caption(kojyo)
                         for full_label, display_label in sub_items:
                             chk_key = f"chk_d_{sel_idx}_{items_d.index(full_label)}"
                             if st.checkbox(display_label, value=True, key=chk_key):
                                 sel_d.append(full_label)
                 else:
-                    st.caption("🔵 出来形：該当なし")
+                    st.caption("出来形管理：該当なし")
 
             with c_h:
                 sel_h = []
                 if items_h:
-                    st.markdown("🟢 **品質管理**")
+                    _subsection_label("#2E7D32", "品質管理")
                     grouped_h = _group_items(items_h)
                     for kojyo, sub_items in grouped_h.items():
                         if len(grouped_h) > 1:
-                            st.caption(f"■ {kojyo}")
+                            st.caption(kojyo)
                         for full_label, display_label in sub_items:
                             chk_key = f"chk_h_{sel_idx}_{items_h.index(full_label)}"
                             if st.checkbox(display_label, value=True, key=chk_key):
                                 sel_h.append(full_label)
                 else:
-                    st.caption("🟢 品質管理：該当なし")
+                    st.caption("品質管理：該当なし")
 
             with c_p:
                 sel_p = []
                 if items_p:
-                    st.markdown("🟠 **撮影箇所**")
+                    _subsection_label("#E65100", "撮影箇所")
                     grouped_p = _group_items(items_p)
                     for kojyo, sub_items in grouped_p.items():
                         if len(grouped_p) > 1:
-                            st.caption(f"■ {kojyo}")
+                            st.caption(kojyo)
                         for full_label, display_label in sub_items:
                             chk_key = f"chk_p_{sel_idx}_{items_p.index(full_label)}"
                             if st.checkbox(display_label, value=True, key=chk_key):
                                 sel_p.append(full_label)
                 else:
-                    st.caption("🟠 撮影箇所：該当なし")
+                    st.caption("撮影箇所：該当なし")
 
             st.session_state.row_selections[ckey] = {
                 "出来形":   sel_d,
@@ -603,14 +680,14 @@ with col_detail:
                 bc = " › ".join(
                     x for x in [r.get("編", ""), r.get("章", ""), r.get("節", ""), first_d] if x
                 )
-                st.caption(f"DB目次: {bc}")
+                st.caption(f"DB 目次位置：{bc}")
 
     else:
-        st.info("↑ 上の表から行をクリックすると候補が表示されます")
+        st.info("上の表から行をクリックすると候補が表示されます。")
 
-# ── ④ 右: 出力 ─────────────────────────────────────────────────────────
+# ── 04  出力 ─────────────────────────────────────────────────────────────
 with col_out:
-    _sec_header("④ 施工管理計画を出力")
+    _sec_header("04", "施工管理計画を出力")
 
     def _collect_labels():
         out_d: list = []
@@ -646,26 +723,35 @@ with col_out:
 
     out_d_labels, out_h_labels, out_p_labels = _collect_labels()
 
-    # 出力サマリ
     st.markdown(
-        f'<div style="background:#EBF3FD; border-radius:6px; '
-        f'padding:10px 14px; font-size:0.85rem; color:#1F4E79; margin-bottom:10px;">'
-        f'出来形管理　<strong>{len(out_d_labels)}</strong> 項目<br>'
-        f'品質管理　　<strong>{len(out_h_labels)}</strong> 項目<br>'
-        f'撮影箇所　　<strong>{len(out_p_labels)}</strong> 項目<br>'
-        f'<span style="font-size:0.75rem; color:#4A6FA5;">※ 未確認行は全候補を採用</span>'
+        f'<div style="background:#F0F4F8; border:1px solid #D0DFF0; '
+        f'border-radius:4px; padding:12px 16px; margin-bottom:12px;">'
+        f'<table style="width:100%; font-size:0.85rem; border:none; '
+        f'border-collapse:collapse;">'
+        f'<tr><td style="color:#4A6FA5; padding:2px 0;">出来形管理</td>'
+        f'<td style="text-align:right; font-weight:700; color:#0D2B4E;">'
+        f'{len(out_d_labels)} 項目</td></tr>'
+        f'<tr><td style="color:#4A6FA5; padding:2px 0;">品質管理</td>'
+        f'<td style="text-align:right; font-weight:700; color:#0D2B4E;">'
+        f'{len(out_h_labels)} 項目</td></tr>'
+        f'<tr><td style="color:#4A6FA5; padding:2px 0;">撮影箇所</td>'
+        f'<td style="text-align:right; font-weight:700; color:#0D2B4E;">'
+        f'{len(out_p_labels)} 項目</td></tr>'
+        f'</table>'
+        f'<div style="font-size:0.73rem; color:#8A9AB0; margin-top:8px;">'
+        f'未確認行は全候補を採用</div>'
         f'</div>',
         unsafe_allow_html=True,
     )
 
     if st.button(
-        "📥 施工管理計画を出力",
+        "施工管理計画を出力",
         type="primary",
         use_container_width=True,
         disabled=not (out_d_labels or out_h_labels or out_p_labels),
     ):
         try:
-            with st.spinner("Excel生成中..."):
+            with st.spinner("Excel 生成中..."):
                 filtered = filter_by_row_labels(
                     kojyo_data, out_d_labels, out_h_labels, out_p_labels
                 )
@@ -681,7 +767,7 @@ with col_out:
             fname = f"施工管理計画_{safe}.xlsx" if safe else "施工管理計画.xlsx"
 
             st.download_button(
-                label=f"⬇️ {fname} をダウンロード",
+                label=f"ダウンロード  {fname}",
                 data=excel_bytes,
                 file_name=fname,
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -689,6 +775,6 @@ with col_out:
             )
 
         except Exception:
-            st.error("Excel生成中にエラーが発生しました。")
-            with st.expander("詳細（開発者向け）"):
+            st.error("Excel 生成中にエラーが発生しました。")
+            with st.expander("エラー詳細"):
                 st.code(traceback.format_exc())
