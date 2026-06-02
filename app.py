@@ -187,6 +187,13 @@ button, input, select, textarea, th, td {
 
 /* ─── divider ──────────────────────────────────────────── */
 hr { border-color: #DDDDDD !important; }
+
+/* ─── Streamlit テーマのグラデーションを無効化 ─────────── */
+[data-testid="stAppViewContainer"],
+[data-testid="stHeader"],
+.stApp, .main {
+    background-image: none !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -375,7 +382,7 @@ with st.sidebar:
 # ヘッダー
 # ===========================================================================
 st.markdown(
-    '<div style="background:#1F4E79; '
+    '<div style="background-color:#1F4E79; background-image:none; '
     'color:#FFFFFF; padding:14px 24px; margin-bottom:6px;">'
     '<div style="font-size:1.1rem; font-weight:700; letter-spacing:0.04em; '
     'color:#FFFFFF;">施工管理計画 自動生成システム</div>'
