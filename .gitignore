@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+
+# アップロードされた一時ファイル・出力ファイル
+*.pdf
+*.xlsx
+!database/kojyo_kijun.xlsx
+
+# macOS
+.DS_Store
+
+# Claude Code
+.claude/
+
+# Streamlit
+.streamlit/secrets.toml

@@ -1,0 +1,1032 @@
+"""
+extractor.py
+PDFから施工管理計画に必要なデータを抽出する。
+
+使い方（CLI確認）:
+    python extractor.py <施工管理基準.pdf> <写真管理基準.pdf>
+"""
+
+import re
+import sys
+import pdfplumber
+import pandas as pd
+
+# ===== ページ範囲定数（1-indexed） =====
+# 土木工事施工管理基準及び規格値（案）.pdf
+DEKIGATA_START_PAGE  = 21   # 出来形管理基準 本文開始
+DEKIGATA_END_PAGE    = 211  # 出来形管理基準 本文終了
+HINSHITSU_START_PAGE = 214  # 品質管理基準 本文開始
+HINSHITSU_END_PAGE   = 268  # 品質管理基準 本文終了
+
+# 写真管理基準.pdf
+PHOTO_ZENTAI_START    = 6   # 撮影箇所一覧表（全体）開始
+PHOTO_ZENTAI_END      = 7   # 撮影箇所一覧表（全体）終了
+PHOTO_HINSHITSU_START = 8   # 撮影箇所一覧表（品質管理）開始
+PHOTO_HINSHITSU_END   = 13  # 撮影箇所一覧表（品質管理）終了
+PHOTO_DEKIGATA_START  = 14  # 撮影箇所一覧表（出来形管理）開始
+PHOTO_DEKIGATA_END    = 74  # 撮影箇所一覧表（出来形管理）終了
+
+# ===== 有効列数フィルタ =====
+# ページによっては図や注釈がテーブルとして誤認識される。列数で本文テーブルのみ抽出する。
+DEKIGATA_VALID_COL_COUNTS  = {12, 13}  # 12=標準, 13=面管理（規格値が2列になる）
+HINSHITSU_VALID_COL_COUNTS = {9}
+PHOTO_5COL_VALID            = {5}       # 全体・品質管理セクション
+PHOTO_9COL_VALID            = {9}       # 出来形管理セクション
+
+# ===== 列名定義 =====
+# 出来形管理: 13列に正規化（12列テーブルは「規格値_個々」列を空で補完）
+DEKIGATA_COLS = [
+    "編", "章", "節", "条", "枝番", "工種",
+    "測定項目", "規格値_条件", "規格値", "規格値_個々",
+    "測定基準", "測定箇所", "摘要",
+]
+HINSHITSU_COLS = [
+    "工種", "種別", "試験区分", "試験項目", "試験方法",
+    "規格値", "試験時期・頻度", "摘要", "試験成績表等による確認",
+]
+PHOTO_ZENTAI_COLS    = ["区分", "sub区分", "撮影項目", "撮影頻度", "摘要"]
+PHOTO_HINSHITSU_COLS = ["番号", "工種", "撮影項目", "撮影頻度", "摘要"]
+PHOTO_DEKIGATA_COLS  = ["編", "章", "節", "条", "枝番", "工種", "撮影項目", "撮影頻度", "摘要"]
+
+# ===== ヘッダー行判定キーワード =====
+# これらの文字列がセルに含まれる行はヘッダーとみなしてスキップする
+DEKIGATA_HEADER_KEYWORDS  = {"編", "工 種", "工種", "測 定 項 目", "測定項目"}
+HINSHITSU_HEADER_KEYWORDS = {"工 種", "工種", "種別", "試験\n区分"}
+PHOTO_HEADER_KEYWORDS     = {"写真管理項目", "撮影項目", "撮影頻度", "撮影頻度〔時期〕", "撮影頻度[時期]"}
+
+
+# ---------------------------------------------------------------------------
+# 共通ユーティリティ
+# ---------------------------------------------------------------------------
+
+def _clean(value) -> str:
+    """Noneを空文字に変換し、セル内改行をスペースに正規化する。"""
+    if value is None:
+        return ""
+    return str(value).replace("\n", " ").strip()
+
+
+def _is_empty_row(row: list) -> bool:
+    return all(not _clean(c) for c in row)
+
+
+def _row_contains(row: list, keywords: set) -> bool:
+    """行内のいずれかのセルがキーワードと一致する場合 True を返す。"""
+    return any(_clean(c) in keywords for c in row)
+
+
+def _forward_fill(df: pd.DataFrame, cols: list) -> pd.DataFrame:
+    """指定列の空文字を前の値で補完する（セル結合の復元）。"""
+    df = df.copy()
+    for col in cols:
+        if col in df.columns:
+            df[col] = df[col].replace("", pd.NA).ffill().fillna("")
+    return df
+
+
+def _collect_rows(pdf, start_page: int, end_page: int, valid_col_counts: set) -> list[list]:
+    """
+    指定ページ範囲のテーブルから、有効な列数の行をすべて収集する。
+    列数が合わないテーブルは図や余白の誤認識とみなし除外する。
+    """
+    rows = []
+    for page_num in range(start_page, end_page + 1):
+        page = pdf.pages[page_num - 1]
+        for table in page.extract_tables():
+            if not table:
+                continue
+            col_count = len(table[0])
+            if col_count not in valid_col_counts:
+                continue
+            rows.extend(table)
+    return rows
+
+
+# ---------------------------------------------------------------------------
+# 出来形管理基準及び規格値
+# ---------------------------------------------------------------------------
+
+def extract_dekigata(施工管理基準_path: str) -> pd.DataFrame:
+    """
+    出来形管理基準及び規格値（案）を抽出する。
+
+    ページ内に12列テーブル（標準）と13列テーブル（面管理）が混在するため、
+    両方を13列に正規化して結合する。
+    """
+    with pdfplumber.open(施工管理基準_path) as pdf:
+        raw_rows = _collect_rows(pdf, DEKIGATA_START_PAGE, DEKIGATA_END_PAGE, DEKIGATA_VALID_COL_COUNTS)
+
+    if not raw_rows:
+        raise ValueError(f"出来形管理基準: p{DEKIGATA_START_PAGE}〜p{DEKIGATA_END_PAGE} からテーブルを取得できませんでした。")
+
+    cleaned = []
+    for row in raw_rows:
+        if _is_empty_row(row):
+            continue
+        if _row_contains(row[:1], DEKIGATA_HEADER_KEYWORDS):
+            continue
+
+        # 12列 → 13列に正規化（「規格値_個々」列を index 9 に挿入）
+        if len(row) == 12:
+            row = list(row[:9]) + [""] + list(row[9:])
+
+        cleaned.append([_clean(c) for c in row[:13]])
+
+    if not cleaned:
+        raise ValueError("出来形管理基準: ヘッダー除去後にデータ行がありませんでした。")
+
+    df = pd.DataFrame(cleaned, columns=DEKIGATA_COLS)
+
+    # セル結合の復元: 編〜工種, 測定基準, 測定箇所, 摘要 を前方補完
+    df = _forward_fill(df, ["編", "章", "節", "条", "枝番", "工種", "測定基準", "測定箇所", "摘要"])
+
+    # 測定項目が空の行（ページ区切り等の残骸）を除去
+    df = df[df["測定項目"].str.strip() != ""].reset_index(drop=True)
+
+    return df
+
+
+# ---------------------------------------------------------------------------
+# 品質管理基準及び規格値
+# ---------------------------------------------------------------------------
+
+def _clean_hinshitsu_kojyo(val: str) -> str:
+    """
+    品質管理の工種名をクリーニングする。
+
+    国交省基準PDFから抽出した工種名には以下の問題がある:
+      1. 先頭に節番号が付く  例: '14 アスファ ルト舗装'
+      2. 列幅制限によるOCRスペースが CJK 文字の間に挿入される
+      3. 脚注（※ 以降）が連結されることがある
+
+    処理順:
+      ① 先頭の番号（半角数字 + スペース）を除去
+      ② CJK 文字間の空白を除去（ASCII 文字間のスペースは保持）
+      ③ ※ 以降の脚注を除去
+      ④ 前後の空白を正規化
+    """
+    s = val.strip()
+    # ① 先頭の番号を除去（例: '14 ', '2 '）
+    s = re.sub(r'^\d+\s+', '', s)
+    # ② CJK文字間のスペースのみ除去（JIS記号等 ASCII 間のスペースは残す）
+    s = re.sub(r'(?<=[\u3000-\u9fff\uff00-\uffef])\s+(?=[\u3000-\u9fff\uff00-\uffef])', '', s)
+    # ③ 脚注（※以降、改行以降の※）を除去
+    s = re.sub(r'\s*※.*', '', s, flags=re.DOTALL)
+    # ④ 前後のスペースを整理
+    s = re.sub(r'\s+', ' ', s).strip()
+    return s
+
+
+def extract_hinshitsu(施工管理基準_path: str) -> pd.DataFrame:
+    """品質管理基準及び規格値（案）を抽出する。"""
+    with pdfplumber.open(施工管理基準_path) as pdf:
+        raw_rows = _collect_rows(pdf, HINSHITSU_START_PAGE, HINSHITSU_END_PAGE, HINSHITSU_VALID_COL_COUNTS)
+
+    if not raw_rows:
+        raise ValueError(f"品質管理基準: p{HINSHITSU_START_PAGE}〜p{HINSHITSU_END_PAGE} からテーブルを取得できませんでした。")
+
+    cleaned = []
+    for row in raw_rows:
+        if _is_empty_row(row):
+            continue
+        if _row_contains(row[:1], HINSHITSU_HEADER_KEYWORDS):
+            continue
+        cleaned.append([_clean(c) for c in row[:9]])
+
+    if not cleaned:
+        raise ValueError("品質管理基準: ヘッダー除去後にデータ行がありませんでした。")
+
+    df = pd.DataFrame(cleaned, columns=HINSHITSU_COLS)
+    df = _forward_fill(df, ["工種", "種別"])
+
+    # 工種名のクリーニング（番号・OCRスペース・脚注を除去）
+    df["工種"] = df["工種"].apply(_clean_hinshitsu_kojyo)
+
+    # 試験項目が空の行を除去
+    df = df[df["試験項目"].str.strip() != ""].reset_index(drop=True)
+
+    return df
+
+
+# ---------------------------------------------------------------------------
+# 撮影箇所一覧表
+# ---------------------------------------------------------------------------
+
+def _extract_photo_section(
+    pdf,
+    start_page: int,
+    end_page: int,
+    valid_col_counts: set,
+    columns: list,
+) -> pd.DataFrame:
+    """撮影箇所一覧表の各セクションを抽出する。"""
+    raw_rows = _collect_rows(pdf, start_page, end_page, valid_col_counts)
+
+    cleaned = []
+    for row in raw_rows:
+        if _is_empty_row(row):
+            continue
+        # 2行構成のヘッダーを両方スキップ
+        if _row_contains(row, PHOTO_HEADER_KEYWORDS):
+            continue
+        cleaned.append([_clean(c) for c in row[: len(columns)]])
+
+    if not cleaned:
+        return pd.DataFrame(columns=columns)
+
+    df = pd.DataFrame(cleaned, columns=columns)
+    return df
+
+
+def extract_photo(写真管理基準_path: str) -> pd.DataFrame:
+    """
+    撮影箇所一覧表（全体・品質管理・出来形管理）を抽出し、
+    「セクション」列を付けて1つのDataFrameに結合する。
+    """
+    with pdfplumber.open(写真管理基準_path) as pdf:
+        df_zentai = _extract_photo_section(
+            pdf, PHOTO_ZENTAI_START, PHOTO_ZENTAI_END,
+            PHOTO_5COL_VALID, PHOTO_ZENTAI_COLS,
+        )
+        # 区分はセル結合されているため前方補完
+        df_zentai = _forward_fill(df_zentai, ["区分"])
+        df_zentai.insert(0, "セクション", "全体")
+
+        df_hinshitsu = _extract_photo_section(
+            pdf, PHOTO_HINSHITSU_START, PHOTO_HINSHITSU_END,
+            PHOTO_5COL_VALID, PHOTO_HINSHITSU_COLS,
+        )
+        df_hinshitsu = _forward_fill(df_hinshitsu, ["番号", "工種"])
+        df_hinshitsu.insert(0, "セクション", "品質管理")
+
+        df_dekigata = _extract_photo_section(
+            pdf, PHOTO_DEKIGATA_START, PHOTO_DEKIGATA_END,
+            PHOTO_9COL_VALID, PHOTO_DEKIGATA_COLS,
+        )
+        df_dekigata = _forward_fill(df_dekigata, ["編", "章", "節", "条", "枝番", "工種"])
+        df_dekigata.insert(0, "セクション", "出来形管理")
+
+    # 列が異なるセクションを結合（不足列はNaNで補完）
+    df = pd.concat([df_zentai, df_hinshitsu, df_dekigata], ignore_index=True)
+    return df
+
+
+# ---------------------------------------------------------------------------
+# メインインターフェース
+# ---------------------------------------------------------------------------
+
+def extract_from_pdf(施工管理基準_path: str, 写真管理基準_path: str) -> dict:
+    """
+    2つのPDFからデータを抽出してdictで返す。
+
+    Returns:
+        {
+            "出来形管理": pd.DataFrame,
+            "品質管理":   pd.DataFrame,
+            "撮影箇所":   pd.DataFrame,
+        }
+    """
+    result = {}
+
+    print("[ 1/3 ] 出来形管理基準を抽出中...")
+    result["出来形管理"] = extract_dekigata(施工管理基準_path)
+    print(f"        → {len(result['出来形管理'])} 行取得")
+
+    print("[ 2/3 ] 品質管理基準を抽出中...")
+    result["品質管理"] = extract_hinshitsu(施工管理基準_path)
+    print(f"        → {len(result['品質管理'])} 行取得")
+
+    print("[ 3/3 ] 撮影箇所一覧表を抽出中...")
+    result["撮影箇所"] = extract_photo(写真管理基準_path)
+    print(f"        → {len(result['撮影箇所'])} 行取得")
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# 数量総括表 抽出
+# ---------------------------------------------------------------------------
+
+# 数量総括表の列数（ページによって22か23列）
+SURYO_VALID_COL_COUNTS = {22, 23}
+SURYO_KOJYO_COL_IDX    = 1   # 工種名が入る列インデックス
+_SURYO_COL_CONFIG      = {
+    23: {"規格": 5, "単位": 9,  "数量": 14},
+    22: {"規格": 5, "単位": 8,  "数量": 13},
+}
+
+# コスト集計項目（工種ではない）- 国交省基準との照合対象外
+SURYO_COST_WORDS = {
+    "直接工事費", "共通仮設費", "共通仮設費（率計上）", "純工事費",
+    "現場管理費", "工事原価", "一般管理費等", "工事価格",
+    "消費税相当額", "工事費計", "運搬費", "重建設機械分解組立輸送費",
+    "技術管理費", "現場環境改善費（率計上）",
+    "ｼｽﾃﾑ初期費(ICT)", "システム初期費(ICT)",
+}
+
+# 工種エリアのx座標範囲・階層列名
+_SURYO_X_MIN   = 35
+_SURYO_X_MAX   = 230
+SURYO_LEVEL_COLS = ["工種", "種別", "細別", "名称"]  # 浅い→深い順
+
+
+def _build_suryo_x0_map(page) -> dict:
+    """
+    ページ内の工種エリア（x座標範囲）のテキスト→x0マッピングを返す。
+    同一テキストが複数出現する場合は最初の出現のx0を使用する。
+    """
+    words = page.extract_words(x_tolerance=3, y_tolerance=3)
+    area  = [w for w in words
+             if _SURYO_X_MIN <= w["x0"] < _SURYO_X_MAX and w["text"].strip()]
+
+    # y座標でグループ化（5pt以内を同一行とみなす）
+    rows: dict = {}
+    for w in area:
+        placed = False
+        for ky in rows:
+            if abs(ky - w["top"]) < 5:
+                rows[ky].append(w)
+                placed = True
+                break
+        if not placed:
+            rows[w["top"]] = [w]
+
+    result: dict = {}
+    for ws in rows.values():
+        ws = sorted(ws, key=lambda w: w["x0"])
+        text = _clean(" ".join(w["text"] for w in ws))
+        x0   = ws[0]["x0"]
+        if text and text not in result:
+            result[text] = x0
+    return result
+
+
+def extract_suryo(pdf_path: str) -> dict:
+    """
+    数量総括表から工事名と工種の4階層（工種/種別/細別/名称）を抽出する。
+
+    x座標からインデントレベルを判定し、各行を浅い→深い順に分類する。
+
+    Returns:
+        {
+            "工事名":   str,
+            "工種リスト": list[str],   # 後方互換用フラットリスト（全レベル）
+            "工種階層":  pd.DataFrame, # 列: 工種/種別/細別/名称
+        }
+    """
+    工事名 = ""
+    all_records: list = []
+
+    with pdfplumber.open(pdf_path) as pdf:
+        # ── 工事名抽出 ──────────────────────────────────────
+        p1_text = pdf.pages[0].extract_text() or ""
+        for line in p1_text.split("\n"):
+            line    = line.strip()
+            compact = re.sub(r"\s", "", line)
+            # スペースを詰めた形で「令和」「工事」を含み「工事名」ラベルではない行
+            if "令和" in compact and "工事" in compact and "工事名" not in compact:
+                工事名 = re.sub(r"\s+", " ", line).strip()
+                break
+
+        # p1 で取れなければテーブルヘッダー行から取得（p2〜）
+        if not 工事名:
+            for page in pdf.pages[1:3]:
+                for table in page.extract_tables():
+                    if not table or len(table[0]) not in SURYO_VALID_COL_COUNTS:
+                        continue
+                    for row in table[:2]:
+                        for cell in row:
+                            v = _clean(cell)
+                            if v and "令和" in v and "工事" in v:
+                                工事名 = v
+                                break
+                        if 工事名:
+                            break
+                if 工事名:
+                    break
+
+        # ── 全ページから工種を階層付きで収集 ─────────────────
+        for page in pdf.pages[1:]:
+            tables = page.extract_tables()
+            valid  = [t for t in tables if t and len(t[0]) in SURYO_VALID_COL_COUNTS]
+            if not valid:
+                continue
+
+            text_to_x0 = _build_suryo_x0_map(page)
+
+            for row in valid[0][2:]:   # 先頭2行はヘッダー
+                if len(row) <= SURYO_KOJYO_COL_IDX:
+                    continue
+                val = _clean(row[SURYO_KOJYO_COL_IDX])
+                if not val:
+                    continue
+                if val.startswith("(") or val.startswith("（"):
+                    continue
+                if val in SURYO_COST_WORDS:
+                    continue
+                if "工事区分" in val or "工事名" in val:
+                    continue
+
+                all_records.append({
+                    "_val": val,
+                    "_x0":  text_to_x0.get(val),
+                })
+
+    # ── x0 → 階層レベル変換 ──────────────────────────────
+    x0_vals = [r["_x0"] for r in all_records if r["_x0"] is not None]
+    if x0_vals:
+        rounded_vals  = sorted(set(round(x / 5) * 5 for x in x0_vals))
+        x0_to_level   = {r: i for i, r in enumerate(rounded_vals)}
+    else:
+        x0_to_level   = {}
+
+    n_lv     = len(SURYO_LEVEL_COLS)
+    current  = [""] * n_lv
+    prev_lv  = 0
+    rows     = []
+
+    for r in all_records:
+        x0 = r["_x0"]
+        if x0 is not None:
+            level = x0_to_level.get(round(x0 / 5) * 5, 0)
+        else:
+            level = prev_lv
+        level = max(0, min(level, n_lv - 1))
+
+        current[level] = r["_val"]
+        for i in range(level + 1, n_lv):
+            current[i] = ""
+        prev_lv = level
+        rows.append(dict(zip(SURYO_LEVEL_COLS, current)))
+
+    df_hierarchy = (
+        pd.DataFrame(rows, columns=SURYO_LEVEL_COLS)
+        if rows else pd.DataFrame(columns=SURYO_LEVEL_COLS)
+    )
+
+    # 後方互換用フラットリスト（全レベルの値を結合）
+    kojyo_set: set = set()
+    for col in SURYO_LEVEL_COLS:
+        kojyo_set.update(v for v in df_hierarchy[col].unique() if v)
+
+    return {
+        "工事名":    工事名,
+        "工種リスト": sorted(kojyo_set),
+        "工種階層":   df_hierarchy,
+    }
+
+
+# ---------------------------------------------------------------------------
+# 工種マッチング
+# ---------------------------------------------------------------------------
+
+def get_unique_kojyo(data: dict) -> dict:
+    """
+    国交省基準データから各シートのユニークな工種リストを返す。
+    Streamlit UIの multiselect 用。
+    """
+    return {
+        "出来形管理": sorted(data["出来形管理"]["工種"].unique().tolist()),
+        "品質管理":   sorted(data["品質管理"]["工種"].unique().tolist()),
+    }
+
+
+def _normalize(s: str) -> str:
+    """マッチング用の正規化: スペース・括弧・記号を除去して小文字化。"""
+    if not s:
+        return ""
+    s = str(s)
+    s = re.sub(r"\s+", "", s)                          # 全空白除去
+    s = re.sub(r"[（）()【】\[\]「」『』]", "", s)   # 括弧除去
+    s = re.sub(r"[・･]", "", s)                        # 中点除去
+    return s.lower()
+
+
+def build_suryo_match_map(suryo_keywords: list, kojyo_list: list) -> dict:
+    """
+    国交省基準工種 → 数量総括表工種 の対応辞書を返す。
+    suggest_matches と同じマッチングロジック。出来形一覧の工種大分類に使用。
+
+    Returns:
+        {国交省工種名: 数量総括表工種名}
+    """
+    norm_kws = {kw: _normalize(kw) for kw in suryo_keywords
+                if len(kw.strip()) >= 2 and len(_normalize(kw)) >= 2}
+
+    result = {}
+    for kojyo in kojyo_list:
+        norm_kojyo = _normalize(kojyo)
+        for suryo_kw, norm_kw in norm_kws.items():
+            if norm_kw in norm_kojyo or norm_kojyo in norm_kw:
+                result[kojyo] = suryo_kw
+                break
+    return result
+
+
+# 出来形管理DBの階層列（最深→最浅の順）
+DEKIGATA_HIERARCHY_COLS = ["工種", "条", "節", "章", "編"]
+
+
+def suggest_matches_hierarchical(suryo_keywords: list, df: pd.DataFrame) -> list:
+    """
+    出来形管理DBを階層的にマッチングする。
+
+    アルゴリズム:
+      1. 数量総括表キーワードを最深の「工種」列に対してマッチング試行。
+      2. マッチしなかったキーワードは次の「条」「節」「章」「編」へと遡る。
+      3. 各階層で一致した場合、対応する「工種」値をすべて候補として収集する。
+         （複数候補が存在する場合はすべてを返し、UIでユーザーが確定する）
+
+    Args:
+        suryo_keywords: 数量総括表から抽出した工種キーワードリスト
+        df:             国交省基準の出来形管理DataFrame（DEKIGATA_HIERARCHY_COLS列を含む）
+
+    Returns:
+        マッチした国交省基準工種のリスト（ソート済み）
+    """
+    norm_kws = [_normalize(kw) for kw in suryo_keywords if len(kw.strip()) >= 2]
+    norm_kws = [n for n in norm_kws if len(n) >= 2]
+
+    if not norm_kws or df.empty:
+        return []
+
+    suggested: set = set()
+    unmatched: set = set(norm_kws)
+
+    for col in DEKIGATA_HIERARCHY_COLS:
+        if not unmatched or col not in df.columns:
+            break
+
+        # 正規化済みの列値 → 工種リスト のマッピングを構築
+        val_to_kojyo: dict = {}
+        for norm_v, kojyo in zip(
+            df[col].apply(lambda x: _normalize(str(x or ""))),
+            df["工種"],
+        ):
+            if norm_v:
+                val_to_kojyo.setdefault(norm_v, [])
+                if kojyo not in val_to_kojyo[norm_v]:
+                    val_to_kojyo[norm_v].append(kojyo)
+
+        still_unmatched: set = set()
+        for norm_kw in unmatched:
+            hit = False
+            for col_val, kojyo_list in val_to_kojyo.items():
+                if norm_kw in col_val or col_val in norm_kw:
+                    suggested.update(kojyo_list)
+                    hit = True
+            if not hit:
+                still_unmatched.add(norm_kw)
+
+        unmatched = still_unmatched
+
+    return sorted(suggested)
+
+
+def suggest_from_suryo_hierarchy(
+    suryo_df: pd.DataFrame,
+    db_kojyo_list: list,
+) -> list:
+    """
+    数量総括表の4階層（工種/種別/細別/名称）を使い、
+    名称→細別→種別→工種の順（深い→浅い）でDBとマッチングする。
+
+    マッチング戦略:
+      各ユニーク行に対して、最も深いレベルから順に照合。
+      いずれかのレベルでマッチしたらそこで打ち止め（上位レベルには遡らない）。
+      複数マッチは全て採用してユーザーが選択する。
+
+    Args:
+        suryo_df:      extract_suryo()["工種階層"]
+        db_kojyo_list: 国交省DBのユニーク工種リスト
+
+    Returns:
+        マッチした国交省DB工種のリスト（ソート済み）
+    """
+    if suryo_df.empty or not db_kojyo_list:
+        return []
+
+    # 正規化済みDB工種リスト（2文字以上のみ）
+    norm_db = [(k, _normalize(k)) for k in db_kojyo_list if len(_normalize(k)) >= 2]
+
+    suggested: set = set()
+
+    # ユニークな階層チェーンを処理
+    chains = suryo_df[SURYO_LEVEL_COLS].drop_duplicates()
+
+    for _, chain in chains.iterrows():
+        # 名称→細別→種別→工種の順（深い→浅い）で照合
+        for level in reversed(SURYO_LEVEL_COLS):
+            val = chain.get(level, "")
+            if not val or len(_normalize(val)) < 2:
+                continue
+            norm_val = _normalize(val)
+            matches = [
+                k for k, nk in norm_db
+                if norm_val in nk or nk in norm_val
+            ]
+            if matches:
+                suggested.update(matches)
+                break   # このチェーンはここで解決。上位レベルには遡らない
+
+    return sorted(suggested)
+
+
+def _match_chain(chain: dict, norm_db: list) -> tuple:
+    """
+    1チェーン（工種/種別/細別/名称）に対して名称→細別→種別→工種の順でマッチングする。
+
+    Returns:
+        (matched_kojyo_list, matched_level_name)
+    """
+    for level in reversed(SURYO_LEVEL_COLS):
+        val = chain.get(level, "")
+        if not val or len(_normalize(val)) < 2:
+            continue
+        norm_val = _normalize(val)
+        matches = [k for k, nk in norm_db if norm_val in nk or nk in norm_val]
+        if matches:
+            return matches, level
+    return [], ""
+
+
+def _expand_to_rows(matched_kojyo: list, full_df: pd.DataFrame, detail_cols: list) -> str:
+    """
+    マッチした工種名リストを DB 行レベルのラベルに展開する。
+
+    - 工種に1行のみ存在 → "工種名"（変換済み扱い）
+    - 工種に複数行存在 → "工種名 / 列1 / 列2" を行ごとに "\\n" で結合（要確認扱い）
+    - 複数工種がマッチ  → それぞれを展開して "\\n" で結合（要確認扱い）
+    """
+    if not matched_kojyo:
+        return ""
+
+    labels = []
+    for kojyo in matched_kojyo:
+        rows = full_df[full_df["工種"] == kojyo]
+        if len(rows) <= 1:
+            labels.append(kojyo)
+        else:
+            for _, r in rows.iterrows():
+                parts = [kojyo]
+                for col in detail_cols:
+                    v = str(r.get(col, "") or "").strip()
+                    if v:
+                        parts.append(v)
+                label = " / ".join(parts)
+                if label not in labels:
+                    labels.append(label)
+
+    return "\n".join(labels)
+
+
+def _expand_photo_rows(
+    matched_kojyo_d: list,
+    matched_kojyo_h: list,
+    photo_df: pd.DataFrame,
+) -> str:
+    """
+    出来形・品質管理のマッチ工種から撮影箇所DBの該当行ラベルを生成する。
+
+    label = "撮影箇所の工種名 / 撮影項目" 形式、改行区切り。
+    出来形管理セクションと品質管理セクションの両方を検索する。
+    """
+    labels: list = []
+    seen: set = set()
+
+    norm_d = [_normalize(k) for k in matched_kojyo_d if k and len(_normalize(k)) >= 2]
+    norm_h = [_normalize(k) for k in matched_kojyo_h if k and len(_normalize(k)) >= 2]
+
+    def _add_from_section(df_section: pd.DataFrame, norm_keys: list) -> None:
+        for _, r in df_section.iterrows():
+            kojyo_val = str(r.get("工種", "") or "").strip()
+            nv = _normalize(kojyo_val)
+            if not nv:
+                continue
+            if any(nv in nk or nk in nv for nk in norm_keys):
+                item = str(r.get("撮影項目", "") or "").strip()
+                label = f"{kojyo_val} / {item}" if item else kojyo_val
+                if label not in seen:
+                    labels.append(label)
+                    seen.add(label)
+
+    if norm_d:
+        _add_from_section(photo_df[photo_df["セクション"] == "出来形管理"], norm_d)
+    if norm_h:
+        _add_from_section(photo_df[photo_df["セクション"] == "品質管理"], norm_h)
+
+    return "\n".join(labels)
+
+
+def build_match_detail(
+    suryo_df: pd.DataFrame,
+    db_dekigata_df: pd.DataFrame,
+    db_hinshitsu_df: pd.DataFrame,
+    db_photo_df: pd.DataFrame = None,
+) -> pd.DataFrame:
+    """
+    数量総括表の各ユニーク行に対し、出来形管理・品質管理のマッチング結果を返す。
+
+    マッチングロジック: 名称→細別→種別→工種の順（深い→浅い）で照合し、
+    最初にマッチしたレベルで確定。マッチした工種に複数のDB行がある場合は
+    行レベルのラベル（工種 / 種別 / 試験項目 など）に展開して改行区切りで返す。
+    → "\n" が含まれる場合は app 側で「要確認」として扱う。
+
+    Args:
+        suryo_df:        extract_suryo()["工種階層"]
+        db_dekigata_df:  国交省基準の出来形管理 DataFrame（全行）
+        db_hinshitsu_df: 国交省基準の品質管理 DataFrame（全行）
+
+    Returns:
+        列: 工種, 種別, 細別, 名称, 出来形マッチ, 品質管理マッチ
+    """
+    out_cols = SURYO_LEVEL_COLS + ["出来形マッチ", "品質管理マッチ", "撮影箇所マッチ"]
+    if suryo_df.empty:
+        return pd.DataFrame(columns=out_cols)
+
+    norm_d = [(k, _normalize(k)) for k in db_dekigata_df["工種"].unique()  if len(_normalize(k)) >= 2]
+    norm_h = [(k, _normalize(k)) for k in db_hinshitsu_df["工種"].unique() if len(_normalize(k)) >= 2]
+
+    records = []
+    chains = suryo_df[SURYO_LEVEL_COLS].drop_duplicates()
+
+    for _, chain in chains.iterrows():
+        cd = chain.to_dict()
+        md, _ = _match_chain(cd, norm_d)
+        mh, _ = _match_chain(cd, norm_h)
+        photo_match = _expand_photo_rows(md, mh, db_photo_df) if db_photo_df is not None else ""
+        records.append({
+            "工種":          cd.get("工種", ""),
+            "種別":          cd.get("種別", ""),
+            "細別":          cd.get("細別", ""),
+            "名称":          cd.get("名称", ""),
+            "出来形マッチ":   _expand_to_rows(md, db_dekigata_df, ["測定項目"]),
+            "品質管理マッチ": _expand_to_rows(mh, db_hinshitsu_df, ["種別", "試験項目"]),
+            "撮影箇所マッチ": photo_match,
+        })
+
+    return pd.DataFrame(records, columns=out_cols)
+
+
+def suggest_matches(suryo_keywords: list, kojyo_list: list) -> list:
+    """
+    数量総括表の工種キーワードから国交省基準の工種候補を提案する。
+    双方向部分一致でマッチングを行う。
+
+    Args:
+        suryo_keywords: 数量総括表から抽出した工種名のリスト
+        kojyo_list:     国交省基準のユニーク工種リスト
+
+    Returns:
+        自動マッチングされた国交省基準工種のリスト
+    """
+    # 2文字以上のキーワードだけを使う
+    norm_kws = [_normalize(kw) for kw in suryo_keywords if len(kw.strip()) >= 2]
+    norm_kws = [n for n in norm_kws if len(n) >= 2]
+
+    suggested = []
+    for kojyo in kojyo_list:
+        norm_kojyo = _normalize(kojyo)
+        for norm_kw in norm_kws:
+            # 双方向部分一致
+            if norm_kw in norm_kojyo or norm_kojyo in norm_kw:
+                suggested.append(kojyo)
+                break
+
+    return suggested
+
+
+def filter_by_row_labels(
+    data: dict,
+    dekigata_labels: list,
+    hinshitsu_labels: list,
+    photo_labels: list = None,
+) -> dict:
+    """
+    行レベルのラベルで各シートをフィルタリングする。
+
+    ラベル形式（_expand_to_rows が生成）:
+      出来形管理: "工種 / 測定項目"  または "工種"（1行のみの場合）
+      品質管理:  "工種 / 種別 / 試験項目"  または "工種"
+
+    Args:
+        data:             load_kojyo_db() の戻り値
+        dekigata_labels:  ユーザーが選択した出来形管理ラベルのリスト
+        hinshitsu_labels: ユーザーが選択した品質管理ラベルのリスト
+
+    Returns:
+        絞り込み済みの data と同じ構造の dict
+    """
+    filtered: dict = {}
+
+    # ── 出来形管理: 行レベルフィルタ ──────────────────────────────
+    df_d = data["出来形管理"]
+    if dekigata_labels:
+        masks = []
+        for label in dekigata_labels:
+            parts = [p.strip() for p in label.split(" / ")]
+            m = df_d["工種"] == parts[0]
+            if len(parts) >= 2 and parts[1]:
+                m = m & (df_d["測定項目"] == parts[1])
+            masks.append(m)
+        combined = masks[0]
+        for m in masks[1:]:
+            combined = combined | m
+        filtered["出来形管理"] = df_d[combined].reset_index(drop=True)
+    else:
+        filtered["出来形管理"] = df_d.iloc[0:0].copy()
+
+    # ── 品質管理: 行レベルフィルタ ────────────────────────────────
+    df_h = data["品質管理"]
+    if hinshitsu_labels:
+        masks = []
+        for label in hinshitsu_labels:
+            parts = [p.strip() for p in label.split(" / ")]
+            m = df_h["工種"] == parts[0]
+            if len(parts) >= 2 and parts[1]:
+                m = m & (df_h["種別"] == parts[1])
+            if len(parts) >= 3 and parts[2]:
+                m = m & (df_h["試験項目"] == parts[2])
+            masks.append(m)
+        combined = masks[0]
+        for m in masks[1:]:
+            combined = combined | m
+        filtered["品質管理"] = df_h[combined].reset_index(drop=True)
+    else:
+        filtered["品質管理"] = df_h.iloc[0:0].copy()
+
+    # ── 撮影箇所 ─────────────────────────────────────────────────
+    df_p = data["撮影箇所"]
+    zentai = df_p[df_p["セクション"] == "全体"].copy()
+
+    if photo_labels is not None:
+        # photo_labels が明示的に渡された場合: ラベルで直接フィルタ
+        df_non_zentai = df_p[df_p["セクション"] != "全体"].copy()
+        if photo_labels:
+            masks = []
+            for label in photo_labels:
+                parts = [p.strip() for p in label.split(" / ")]
+                kojyo = parts[0]
+                item  = parts[1] if len(parts) > 1 else None
+                m = df_non_zentai["工種"] == kojyo
+                if item:
+                    m = m & (df_non_zentai["撮影項目"] == item)
+                masks.append(m)
+            combined = masks[0]
+            for m in masks[1:]:
+                combined = combined | m
+            df_non_zentai = df_non_zentai[combined]
+        else:
+            df_non_zentai = df_non_zentai.iloc[0:0]
+        filtered["撮影箇所"] = pd.concat([zentai, df_non_zentai], ignore_index=True)
+    else:
+        # 旧方式: 出来形・品質管理ラベルから自動導出
+        selected_d = list({lbl.split(" / ")[0].strip() for lbl in dekigata_labels})
+        selected_h = list({lbl.split(" / ")[0].strip() for lbl in hinshitsu_labels})
+
+        df_dek_photo = df_p[df_p["セクション"] == "出来形管理"].copy()
+        if selected_d:
+            norm_d = [_normalize(x) for x in selected_d]
+
+            def _match_d(val):
+                if pd.isna(val):
+                    return False
+                nv = _normalize(str(val))
+                return any((nv in nd or nd in nv) for nd in norm_d if nd)
+
+            df_dek_photo = df_dek_photo[df_dek_photo["工種"].apply(_match_d)]
+        else:
+            df_dek_photo = df_dek_photo.iloc[0:0]
+
+        df_hin_photo = df_p[df_p["セクション"] == "品質管理"].copy()
+        if selected_h:
+            selected_nums = set()
+            for h in selected_h:
+                parts = h.strip().split()
+                if parts and parts[0].isdigit():
+                    selected_nums.add(parts[0])
+            norm_h = [_normalize(x) for x in selected_h]
+
+            def _match_h(row):
+                ban = str(row.get("番号", "") or "").strip()
+                if ban and ban in selected_nums:
+                    return True
+                nv = _normalize(str(row.get("工種", "") or ""))
+                return any((nv in nh or nh in nv) for nh in norm_h if nh)
+
+            df_hin_photo = df_hin_photo[df_hin_photo.apply(_match_h, axis=1)]
+        else:
+            df_hin_photo = df_hin_photo.iloc[0:0]
+
+        filtered["撮影箇所"] = pd.concat(
+            [zentai, df_hin_photo, df_dek_photo], ignore_index=True
+        )
+
+    return filtered
+
+
+def filter_by_kojyo(
+    data: dict,
+    selected_dekigata: list,
+    selected_hinshitsu: list,
+) -> dict:
+    """
+    ユーザーが選択した工種で各シートのデータを絞り込む。
+
+    Args:
+        data:               extract_from_pdf() の戻り値
+        selected_dekigata:  出来形管理基準で使用する工種リスト（完全一致）
+        selected_hinshitsu: 品質管理基準で使用する工種リスト（完全一致）
+
+    Returns:
+        絞り込み済みの data と同じ構造の dict
+    """
+    filtered: dict = {}
+
+    # ── 出来形管理: 工種の完全一致 ────────────────────────────
+    df_d = data["出来形管理"]
+    if selected_dekigata:
+        filtered["出来形管理"] = df_d[df_d["工種"].isin(selected_dekigata)].reset_index(drop=True)
+    else:
+        filtered["出来形管理"] = df_d.iloc[0:0].copy()
+
+    # ── 品質管理: 工種の完全一致 ──────────────────────────────
+    df_h = data["品質管理"]
+    if selected_hinshitsu:
+        filtered["品質管理"] = df_h[df_h["工種"].isin(selected_hinshitsu)].reset_index(drop=True)
+    else:
+        filtered["品質管理"] = df_h.iloc[0:0].copy()
+
+    # ── 撮影箇所: 全体は全件 / 品質管理・出来形管理は工種でフィルタ ──
+    df_p = data["撮影箇所"]
+
+    # 全体セクションは常に全件
+    zentai = df_p[df_p["セクション"] == "全体"].copy()
+
+    # 出来形管理セクション: 工種列とキーワードの双方向部分一致
+    df_dek_photo = df_p[df_p["セクション"] == "出来形管理"].copy()
+    if selected_dekigata:
+        norm_d = [_normalize(x) for x in selected_dekigata]
+
+        def _match_d(val):
+            if pd.isna(val):
+                return False
+            nv = _normalize(str(val))
+            return any((nv in nd or nd in nv) for nd in norm_d if nd)
+
+        df_dek_photo = df_dek_photo[df_dek_photo["工種"].apply(_match_d)]
+    else:
+        df_dek_photo = df_dek_photo.iloc[0:0]
+
+    # 品質管理セクション: 番号一致 or 工種キーワード一致
+    df_hin_photo = df_p[df_p["セクション"] == "品質管理"].copy()
+    if selected_hinshitsu:
+        # "19 固結工" → 番号="19" を抽出して 番号列と照合
+        selected_nums = set()
+        for h in selected_hinshitsu:
+            parts = h.strip().split()
+            if parts and parts[0].isdigit():
+                selected_nums.add(parts[0])
+        norm_h = [_normalize(x) for x in selected_hinshitsu]
+
+        def _match_h(row):
+            ban = str(row.get("番号", "") or "").strip()
+            if ban and ban in selected_nums:
+                return True
+            nv = _normalize(str(row.get("工種", "") or ""))
+            return any((nv in nh or nh in nv) for nh in norm_h if nh)
+
+        df_hin_photo = df_hin_photo[df_hin_photo.apply(_match_h, axis=1)]
+    else:
+        df_hin_photo = df_hin_photo.iloc[0:0]
+
+    filtered["撮影箇所"] = pd.concat(
+        [zentai, df_hin_photo, df_dek_photo], ignore_index=True
+    )
+
+    return filtered
+
+
+# ---------------------------------------------------------------------------
+# CLI 動作確認
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    施工管理基準 = (
+        sys.argv[1]
+        if len(sys.argv) > 1
+        else "/Users/tomoki/Downloads/OneDrive_1_2026-5-18/土木工事施工管理基準及び規格値（案）.pdf"
+    )
+    写真管理基準 = (
+        sys.argv[2]
+        if len(sys.argv) > 2
+        else "/Users/tomoki/Downloads/OneDrive_1_2026-5-18/写真管理基準.pdf"
+    )
+
+    data = extract_from_pdf(施工管理基準, 写真管理基準)
+
+    for sheet_name, df in data.items():
+        print(f"\n{'=' * 70}")
+        print(f"【{sheet_name}】  {len(df)} 行 × {len(df.columns)} 列")
+        print(f"列: {list(df.columns)}")
+        print(df.head(10).to_string(max_colwidth=40))
