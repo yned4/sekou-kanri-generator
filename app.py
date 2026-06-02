@@ -51,178 +51,142 @@ button, input, select, textarea, th, td {
                  'Hiragino Kaku Gothic ProN', 'Hiragino Sans',
                  Meiryo, sans-serif !important;
 }
-/* Material Icons フォントを保護（icon名がテキストで出るのを防ぐ） */
-.material-icons,
-.material-symbols-outlined,
-.material-symbols-rounded,
-[class*="material-icons"] {
+.material-icons, .material-symbols-outlined,
+.material-symbols-rounded, [class*="material-icons"] {
     font-family: 'Material Icons', 'Material Symbols Outlined',
                  'Material Symbols Rounded' !important;
 }
 
 /* ─── ページ背景 ────────────────────────────────────────── */
-.stApp { background-color: #F4F7FB; }
+.stApp { background-color: #F5F5F5; }
 
 /* ─── メトリクスカード ─────────────────────────────────── */
 [data-testid="metric-container"] {
     background: #FFFFFF;
-    border: 1px solid #D0DFF0;
-    border-top: 3px solid #1565C0;
-    border-radius: 4px;
-    padding: 14px 18px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    border: 1px solid #CCCCCC;
+    border-left: 3px solid #1F4E79;
+    border-radius: 2px;
+    padding: 12px 16px;
 }
 [data-testid="stMetricLabel"] > div {
-    font-size: 0.70rem !important;
-    font-weight: 700 !important;
-    color: #5B7FA6 !important;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    font-size: 0.75rem !important;
+    font-weight: 600 !important;
+    color: #555555 !important;
 }
 [data-testid="stMetricValue"] > div {
-    font-size: 1.65rem !important;
+    font-size: 1.5rem !important;
     font-weight: 700 !important;
-    color: #0D2B4E !important;
+    color: #1F4E79 !important;
 }
 
 /* ─── プライマリボタン ─────────────────────────────────── */
 .stButton > button[kind="primary"] {
-    background: #1565C0;
+    background: #1F4E79;
     color: #FFFFFF;
     border: none;
-    border-radius: 4px;
-    font-weight: 700;
-    letter-spacing: 0.05em;
-    box-shadow: 0 2px 6px rgba(21,101,192,0.28);
-    transition: background 0.15s, box-shadow 0.15s, transform 0.1s;
+    border-radius: 2px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
 }
 .stButton > button[kind="primary"]:hover {
-    background: #0D47A1;
-    box-shadow: 0 4px 12px rgba(21,101,192,0.40);
-    transform: translateY(-1px);
+    background: #163A5A;
 }
 .stButton > button[kind="primary"]:disabled {
-    background: #90A4AE !important;
-    box-shadow: none !important;
-    transform: none !important;
+    background: #AAAAAA !important;
 }
 
 /* ─── ダウンロードボタン ───────────────────────────────── */
 [data-testid="stDownloadButton"] > button {
     background: #FFFFFF !important;
-    color: #1565C0 !important;
-    border: 1.5px solid #1565C0 !important;
-    border-radius: 4px !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.03em;
+    color: #1F4E79 !important;
+    border: 1px solid #1F4E79 !important;
+    border-radius: 2px !important;
+    font-weight: 600 !important;
+}
+[data-testid="stDownloadButton"] > button:hover {
+    background: #EEF4FB !important;
 }
 
 /* ─── info / success ───────────────────────────────────── */
 [data-testid="stInfo"] {
-    background: #EBF3FD;
-    border-left: 4px solid #1565C0;
-    border-radius: 0 4px 4px 0;
+    background: #EEF4FB;
+    border-left: 3px solid #1F4E79;
+    border-radius: 0;
     color: #1A2B3C;
 }
 [data-testid="stSuccess"] {
-    background: #E8F5E9;
-    border-radius: 4px;
-    color: #1B4332;
+    border-radius: 0;
 }
 
 /* ─── サイドバー ───────────────────────────────────────── */
 [data-testid="stSidebar"] {
-    background: #0C2340;
-    border-right: 1px solid #163758;
+    background: #1F2D3D;
+    border-right: 1px solid #2E3F52;
 }
-[data-testid="stSidebar"] * {
-    color: #C8DEF5 !important;
-}
-[data-testid="stSidebar"] strong,
-[data-testid="stSidebar"] b {
-    color: #E8F2FC !important;
+[data-testid="stSidebar"] * { color: #C8D8E8 !important; }
+[data-testid="stSidebar"] strong, [data-testid="stSidebar"] b {
+    color: #E2EDF8 !important;
 }
 [data-testid="stSidebar"] h3 {
-    color: #6AAEE0 !important;
-    font-size: 0.72rem !important;
-    letter-spacing: 0.14em !important;
+    color: #7AAFD4 !important;
+    font-size: 0.70rem !important;
+    letter-spacing: 0.16em !important;
     text-transform: uppercase !important;
     font-weight: 700 !important;
-    margin-top: 4px !important;
 }
-[data-testid="stSidebar"] hr {
-    border-color: #1E4060 !important;
-}
-/* サイドバー内コードブロック */
+[data-testid="stSidebar"] hr { border-color: #2E3F52 !important; }
 [data-testid="stSidebar"] code {
-    background: #163758 !important;
+    background: #162435 !important;
     color: #7EC8E3 !important;
-    border: 1px solid #1E4A72 !important;
-    padding: 1px 6px !important;
-    border-radius: 3px !important;
-    font-family: 'SFMono-Regular', Consolas, 'Courier New', monospace !important;
-    font-size: 0.82rem !important;
+    border: 1px solid #2A4060 !important;
+    padding: 1px 5px !important;
+    border-radius: 2px !important;
+    font-family: Consolas, 'Courier New', monospace !important;
+    font-size: 0.80rem !important;
 }
-/* サイドバー エクスパンダー */
 [data-testid="stSidebar"] [data-testid="stExpander"] {
-    background: #0F2D4A !important;
-    border: 1px solid #1E4A72 !important;
-    border-radius: 4px !important;
-    overflow: hidden !important;
-}
-[data-testid="stSidebar"] [data-testid="stExpander"] details {
-    overflow: visible !important;
+    background: #162435 !important;
+    border: 1px solid #2A4060 !important;
+    border-radius: 2px !important;
 }
 [data-testid="stSidebar"] [data-testid="stExpander"] summary {
-    color: #A0C8E8 !important;
+    color: #A0C4DC !important;
     font-weight: 600 !important;
-    font-size: 0.85rem !important;
-    font-family: 'Yu Gothic', '游ゴシック', YuGothic, Meiryo, sans-serif !important;
+    font-size: 0.84rem !important;
+    font-family: 'Yu Gothic', YuGothic, Meiryo, sans-serif !important;
 }
 [data-testid="stSidebar"] [data-testid="stExpander"] .stMarkdown p,
-[data-testid="stSidebar"] [data-testid="stExpander"] .stMarkdown li,
-[data-testid="stSidebar"] [data-testid="stExpander"] .stMarkdown strong {
-    font-family: 'Yu Gothic', '游ゴシック', YuGothic, Meiryo, sans-serif !important;
+[data-testid="stSidebar"] [data-testid="stExpander"] .stMarkdown li {
+    font-family: 'Yu Gothic', YuGothic, Meiryo, sans-serif !important;
     font-size: 0.82rem !important;
-    line-height: 1.75 !important;
-    color: #B8D4EC !important;
+    line-height: 1.80 !important;
+    color: #B0C8DC !important;
 }
 [data-testid="stSidebar"] [data-testid="stExpander"] .stMarkdown strong {
-    color: #DDF0FF !important;
+    color: #D8EAF8 !important;
+    font-family: 'Yu Gothic', YuGothic, Meiryo, sans-serif !important;
 }
 [data-testid="stSidebar"] [data-testid="stExpander"] hr {
-    border-color: #1E4060 !important;
-    margin: 6px 0 !important;
+    border-color: #2A4060 !important;
+    margin: 5px 0 !important;
 }
-/* サイドバー ファイルアップローダー */
 [data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] {
-    background: #0F2D4A !important;
-    border: 1.5px dashed #2A6496 !important;
-    border-radius: 6px !important;
+    background: #162435 !important;
+    border: 1px dashed #3A5A7A !important;
+    border-radius: 2px !important;
 }
-/* サイドバー プライマリボタン */
 [data-testid="stSidebar"] .stButton > button[kind="primary"] {
-    background: #1565C0 !important;
+    background: #1F4E79 !important;
     color: #FFFFFF !important;
+    border-radius: 2px !important;
 }
 
 /* ─── ラジオ・チェックボックス ─────────────────────────── */
 [data-testid="stRadio"] label,
-[data-testid="stCheckbox"] label {
-    font-size: 0.85rem;
-}
+[data-testid="stCheckbox"] label { font-size: 0.85rem; }
 
 /* ─── divider ──────────────────────────────────────────── */
-hr { border-color: #D0DFF0 !important; }
-
-/* ─── テーブルヘッダー ─────────────────────────────────── */
-thead tr th {
-    background: #1F4E79 !important;
-    color: #FFFFFF !important;
-    font-weight: 700 !important;
-    font-size: 0.82rem !important;
-    letter-spacing: 0.04em !important;
-}
+hr { border-color: #DDDDDD !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -299,12 +263,12 @@ def _sec_header(num: str, label: str) -> None:
     """番号付きセクションヘッダーを描画する。"""
     st.markdown(
         f'<div style="display:flex; align-items:center; gap:10px; '
-        f'margin:14px 0 6px 0;">'
-        f'<span style="background:#1565C0; color:#FFFFFF; '
-        f'font-size:0.72rem; font-weight:700; letter-spacing:0.08em; '
-        f'padding:3px 8px; border-radius:3px;">{num}</span>'
-        f'<span style="font-weight:700; color:#0D2B4E; font-size:0.95rem; '
-        f'letter-spacing:0.02em;">{label}</span>'
+        f'margin:14px 0 6px 0; border-bottom:2px solid #1F4E79; padding-bottom:5px;">'
+        f'<span style="background:#1F4E79; color:#FFFFFF; '
+        f'font-size:0.70rem; font-weight:700; letter-spacing:0.06em; '
+        f'padding:2px 7px; border-radius:1px;">{num}</span>'
+        f'<span style="font-weight:700; color:#1F4E79; font-size:0.92rem; '
+        f'letter-spacing:0.01em;">{label}</span>'
         f'</div>',
         unsafe_allow_html=True,
     )
@@ -313,9 +277,9 @@ def _sec_header(num: str, label: str) -> None:
 def _subsection_label(color: str, label: str) -> None:
     """候補選択内の小見出しを描画する。"""
     st.markdown(
-        f'<div style="border-left:3px solid {color}; padding:2px 8px; '
-        f'font-weight:700; font-size:0.85rem; color:#1A2B3C; '
-        f'margin-bottom:6px;">{label}</div>',
+        f'<div style="border-bottom:1px solid {color}; padding:0 0 3px 0; '
+        f'font-weight:700; font-size:0.83rem; color:#333333; '
+        f'margin-bottom:6px; letter-spacing:0.02em;">{label}</div>',
         unsafe_allow_html=True,
     )
 
@@ -326,12 +290,10 @@ def _subsection_label(color: str, label: str) -> None:
 with st.sidebar:
     # ── ヘッダー ─────────────────────────────────────────────
     st.markdown(
-        '<div style="padding:16px 0 10px 0; text-align:center; '
-        'border-bottom:1px solid #1E4060; margin-bottom:12px;">'
-        '<div style="font-size:1.05rem; font-weight:700; color:#A8D4F5; '
-        'letter-spacing:0.08em;">施工管理計画</div>'
-        '<div style="font-size:0.65rem; color:#4A7CA0; letter-spacing:0.18em; '
-        'margin-top:3px;">AUTO GENERATION SYSTEM</div>'
+        '<div style="padding:14px 0 10px 0; '
+        'border-bottom:1px solid #2E3F52; margin-bottom:10px;">'
+        '<div style="font-size:0.92rem; font-weight:700; color:#C0D8EE; '
+        'letter-spacing:0.04em;">施工管理計画 自動生成</div>'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -413,11 +375,11 @@ with st.sidebar:
 # ヘッダー
 # ===========================================================================
 st.markdown(
-    '<div style="background:linear-gradient(135deg, #0C2340 0%, #1565C0 100%); '
-    'color:#FFFFFF; padding:18px 28px; border-radius:6px; margin-bottom:6px;">'
-    '<div style="font-size:1.2rem; font-weight:700; letter-spacing:0.06em; '
+    '<div style="background:#1F4E79; '
+    'color:#FFFFFF; padding:14px 24px; margin-bottom:6px;">'
+    '<div style="font-size:1.1rem; font-weight:700; letter-spacing:0.04em; '
     'color:#FFFFFF;">施工管理計画 自動生成システム</div>'
-    '<div style="font-size:0.78rem; color:#9DC8EF; margin-top:4px; letter-spacing:0.03em;">'
+    '<div style="font-size:0.76rem; color:#A8C8E8; margin-top:3px;">'
     '数量総括表 PDF  →  国交省基準 DB マッピング  →  施工管理計画 Excel 出力'
     '</div></div>',
     unsafe_allow_html=True,
@@ -521,13 +483,13 @@ if ev_l.selection.rows:
     st.session_state.selected_idx = ev_l.selection.rows[0]
 
 st.markdown(
-    '<div style="font-size:0.78rem; color:#5B7FA6; margin-top:4px;">'
-    '<span style="background:#FFF9C4; border:1px solid #DDD; padding:1px 7px; '
-    'border-radius:3px; margin-right:8px;">候補あり</span>'
-    '<span style="background:#E8F5E9; border:1px solid #DDD; padding:1px 7px; '
-    'border-radius:3px; margin-right:8px;">選択済み</span>'
-    '<span style="background:#F5F5F5; border:1px solid #DDD; padding:1px 7px; '
-    'border-radius:3px;">対象外</span>'
+    '<div style="font-size:0.76rem; color:#666666; margin-top:4px;">'
+    '<span style="background:#FFF9C4; border:1px solid #CCCCCC; padding:1px 8px; '
+    'margin-right:8px;">候補あり</span>'
+    '<span style="background:#E8F5E9; border:1px solid #CCCCCC; padding:1px 8px; '
+    'margin-right:8px;">選択済み</span>'
+    '<span style="background:#F0F0F0; border:1px solid #CCCCCC; padding:1px 8px;">'
+    '対象外</span>'
     '</div>',
     unsafe_allow_html=True,
 )
@@ -611,11 +573,11 @@ with col_detail:
 
         chain = " › ".join(sel[c] for c in SURYO_LEVEL_COLS if sel.get(c, ""))
         st.markdown(
-            f'<div style="background:#EBF3FD; border-left:4px solid #1565C0; '
-            f'border-radius:0 4px 4px 0; padding:8px 14px; margin-bottom:10px; '
-            f'font-size:0.88rem; color:#0D2B4E;">'
+            f'<div style="background:#F0F4F8; border-left:3px solid #1F4E79; '
+            f'padding:7px 12px; margin-bottom:10px; '
+            f'font-size:0.87rem; color:#1F2D3D;">'
             f'<strong>{sel["_name"]}</strong><br>'
-            f'<span style="font-size:0.78rem; color:#4A6FA5;">{chain}</span>'
+            f'<span style="font-size:0.76rem; color:#555555;">{chain}</span>'
             f'</div>',
             unsafe_allow_html=True,
         )
@@ -738,21 +700,19 @@ with col_out:
     out_d_labels, out_h_labels, out_p_labels = _collect_labels()
 
     st.markdown(
-        f'<div style="background:#F0F4F8; border:1px solid #D0DFF0; '
-        f'border-radius:4px; padding:12px 16px; margin-bottom:12px;">'
-        f'<table style="width:100%; font-size:0.85rem; border:none; '
-        f'border-collapse:collapse;">'
-        f'<tr><td style="color:#4A6FA5; padding:2px 0;">出来形管理</td>'
-        f'<td style="text-align:right; font-weight:700; color:#0D2B4E;">'
-        f'{len(out_d_labels)} 項目</td></tr>'
-        f'<tr><td style="color:#4A6FA5; padding:2px 0;">品質管理</td>'
-        f'<td style="text-align:right; font-weight:700; color:#0D2B4E;">'
-        f'{len(out_h_labels)} 項目</td></tr>'
-        f'<tr><td style="color:#4A6FA5; padding:2px 0;">撮影箇所</td>'
-        f'<td style="text-align:right; font-weight:700; color:#0D2B4E;">'
-        f'{len(out_p_labels)} 項目</td></tr>'
+        f'<div style="background:#FFFFFF; border:1px solid #CCCCCC; '
+        f'padding:10px 14px; margin-bottom:12px;">'
+        f'<table style="width:100%; font-size:0.84rem; border:none; '
+        f'border-collapse:collapse; color:#333333;">'
+        f'<tr><td style="padding:3px 0;">出来形管理</td>'
+        f'<td style="text-align:right; font-weight:700;">{len(out_d_labels)} 項目</td></tr>'
+        f'<tr><td style="padding:3px 0;">品質管理</td>'
+        f'<td style="text-align:right; font-weight:700;">{len(out_h_labels)} 項目</td></tr>'
+        f'<tr><td style="padding:3px 0;">撮影箇所</td>'
+        f'<td style="text-align:right; font-weight:700;">{len(out_p_labels)} 項目</td></tr>'
         f'</table>'
-        f'<div style="font-size:0.73rem; color:#8A9AB0; margin-top:8px;">'
+        f'<div style="font-size:0.72rem; color:#888888; margin-top:6px; '
+        f'border-top:1px solid #EEEEEE; padding-top:5px;">'
         f'未確認行は全候補を採用</div>'
         f'</div>',
         unsafe_allow_html=True,
