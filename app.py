@@ -46,10 +46,18 @@ st.markdown("""
 <style>
 /* ─── フォント: 游ゴシック ─────────────────────────────── */
 html, body, [class*="css"], .stMarkdown, .stText,
-button, input, select, textarea, th, td, p, span, div, caption {
+button, input, select, textarea, th, td {
     font-family: 'Yu Gothic', '游ゴシック', YuGothic,
                  'Hiragino Kaku Gothic ProN', 'Hiragino Sans',
                  Meiryo, sans-serif !important;
+}
+/* Material Icons フォントを保護（icon名がテキストで出るのを防ぐ） */
+.material-icons,
+.material-symbols-outlined,
+.material-symbols-rounded,
+[class*="material-icons"] {
+    font-family: 'Material Icons', 'Material Symbols Outlined',
+                 'Material Symbols Rounded' !important;
 }
 
 /* ─── ページ背景 ────────────────────────────────────────── */
@@ -160,25 +168,31 @@ button, input, select, textarea, th, td, p, span, div, caption {
     background: #0F2D4A !important;
     border: 1px solid #1E4A72 !important;
     border-radius: 4px !important;
+    overflow: hidden !important;
+}
+[data-testid="stSidebar"] [data-testid="stExpander"] details {
+    overflow: visible !important;
 }
 [data-testid="stSidebar"] [data-testid="stExpander"] summary {
     color: #A0C8E8 !important;
     font-weight: 600 !important;
     font-size: 0.85rem !important;
+    font-family: 'Yu Gothic', '游ゴシック', YuGothic, Meiryo, sans-serif !important;
 }
-[data-testid="stSidebar"] [data-testid="stExpander"] p,
-[data-testid="stSidebar"] [data-testid="stExpander"] li,
-[data-testid="stSidebar"] [data-testid="stExpander"] span {
+[data-testid="stSidebar"] [data-testid="stExpander"] .stMarkdown p,
+[data-testid="stSidebar"] [data-testid="stExpander"] .stMarkdown li,
+[data-testid="stSidebar"] [data-testid="stExpander"] .stMarkdown strong {
+    font-family: 'Yu Gothic', '游ゴシック', YuGothic, Meiryo, sans-serif !important;
+    font-size: 0.82rem !important;
+    line-height: 1.75 !important;
     color: #B8D4EC !important;
-    font-size: 0.83rem !important;
-    line-height: 1.7 !important;
 }
-[data-testid="stSidebar"] [data-testid="stExpander"] strong {
-    color: #D8ECFA !important;
+[data-testid="stSidebar"] [data-testid="stExpander"] .stMarkdown strong {
+    color: #DDF0FF !important;
 }
 [data-testid="stSidebar"] [data-testid="stExpander"] hr {
     border-color: #1E4060 !important;
-    margin: 8px 0 !important;
+    margin: 6px 0 !important;
 }
 /* サイドバー ファイルアップローダー */
 [data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] {
