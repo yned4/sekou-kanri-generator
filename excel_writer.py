@@ -113,7 +113,7 @@ def _write_title_row(ws, title: str, n_cols: int) -> None:
     """シート先頭に工事名タイトル行を書き込む（結合セル）。"""
     ws.insert_rows(1)
     cell = ws.cell(row=1, column=1, value=title)
-    cell.font      = Font(bold=True, size=11)
+    cell.font      = Font(name=FONT_NAME, bold=True, size=11)
     cell.alignment = Alignment(horizontal="left", vertical="center")
     if n_cols > 1:
         ws.merge_cells(
