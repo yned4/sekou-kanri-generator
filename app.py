@@ -188,12 +188,22 @@ button, input, select, textarea, th, td {
 /* ─── divider ──────────────────────────────────────────── */
 hr { border-color: #DDDDDD !important; }
 
-/* ─── Streamlit テーマのグラデーションを無効化 ─────────── */
+/* ─── Streamlit テーマのグラデーション・発光を無効化 ──── */
 [data-testid="stAppViewContainer"],
+[data-testid="stAppViewContainer"]::before,
+[data-testid="stAppViewContainer"]::after,
 [data-testid="stHeader"],
-.stApp, .main {
+[data-testid="stHeader"]::before,
+[data-testid="stHeader"]::after,
+.stApp, .stApp::before, .stApp::after,
+.main, .main::before, .main::after {
     background-image: none !important;
+    background: #F5F5F5 !important;
+    filter: none !important;
+    backdrop-filter: none !important;
 }
+/* テキストの発光（text-shadow）を全体で無効化 */
+* { text-shadow: none !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -383,10 +393,13 @@ with st.sidebar:
 # ===========================================================================
 st.markdown(
     '<div style="background-color:#1F4E79; background-image:none; '
-    'color:#FFFFFF; padding:14px 24px; margin-bottom:6px;">'
+    'color:#FFFFFF; padding:14px 24px; margin-bottom:6px; '
+    'filter:none; box-shadow:none;">'
     '<div style="font-size:1.1rem; font-weight:700; letter-spacing:0.04em; '
-    'color:#FFFFFF;">施工管理計画 自動生成システム</div>'
-    '<div style="font-size:0.76rem; color:#A8C8E8; margin-top:3px;">'
+    'color:#FFFFFF; text-shadow:none; -webkit-font-smoothing:antialiased;">'
+    '施工管理計画 自動生成システム</div>'
+    '<div style="font-size:0.76rem; color:#A8C8E8; margin-top:3px; '
+    'text-shadow:none; -webkit-font-smoothing:antialiased;">'
     '数量総括表 PDF  →  国交省基準 DB マッピング  →  施工管理計画 Excel 出力'
     '</div></div>',
     unsafe_allow_html=True,
