@@ -34,10 +34,130 @@ from build_db import (
 # ページ設定
 # ===========================================================================
 st.set_page_config(
-    page_title="施工管理計画 自動生成アプリ",
+    page_title="施工管理計画 自動生成",
     page_icon="📋",
     layout="wide",
 )
+
+# ===========================================================================
+# カスタム CSS
+# ===========================================================================
+st.markdown("""
+<style>
+/* ─── フォント: 游ゴシック ─────────────────────────────── */
+html, body, [class*="css"], .stMarkdown, .stText,
+button, input, select, textarea, th, td {
+    font-family: 'Yu Gothic', '游ゴシック', YuGothic,
+                 'Hiragino Kaku Gothic ProN', 'Hiragino Sans',
+                 Meiryo, sans-serif !important;
+}
+
+/* ─── ページ背景 ────────────────────────────────────────── */
+.stApp { background-color: #F7FAFD; }
+
+/* ─── メトリクスカード ─────────────────────────────────── */
+[data-testid="metric-container"] {
+    background: #FFFFFF;
+    border: 1px solid #C8DCF0;
+    border-top: 3px solid #1565C0;
+    border-radius: 6px;
+    padding: 14px 18px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+[data-testid="stMetricLabel"] > div {
+    font-size: 0.72rem !important;
+    font-weight: 700 !important;
+    color: #4A6FA5 !important;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+[data-testid="stMetricValue"] > div {
+    font-size: 1.7rem !important;
+    font-weight: 700 !important;
+    color: #1F4E79 !important;
+}
+
+/* ─── プライマリボタン ─────────────────────────────────── */
+.stButton > button[kind="primary"] {
+    background: linear-gradient(135deg, #1565C0 0%, #1976D2 100%);
+    color: #FFFFFF;
+    border: none;
+    border-radius: 6px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    box-shadow: 0 2px 8px rgba(21,101,192,0.30);
+    transition: box-shadow 0.2s, transform 0.15s;
+}
+.stButton > button[kind="primary"]:hover {
+    box-shadow: 0 4px 14px rgba(21,101,192,0.45);
+    transform: translateY(-1px);
+}
+
+/* ─── セカンダリボタン ─────────────────────────────────── */
+.stButton > button[kind="secondary"] {
+    border: 1.5px solid #1565C0;
+    color: #1565C0;
+    border-radius: 6px;
+    font-weight: 600;
+}
+
+/* ─── ダウンロードボタン ───────────────────────────────── */
+[data-testid="stDownloadButton"] > button {
+    background: #E3F2FD !important;
+    color: #1565C0 !important;
+    border: 2px solid #1565C0 !important;
+    border-radius: 6px !important;
+    font-weight: 700 !important;
+}
+
+/* ─── info/success ボックス ────────────────────────────── */
+[data-testid="stInfo"] {
+    background: #EBF3FD;
+    border-left: 4px solid #1565C0;
+    border-radius: 0 6px 6px 0;
+    color: #1A2332;
+}
+[data-testid="stSuccess"] {
+    border-radius: 6px;
+}
+
+/* ─── サイドバー ───────────────────────────────────────── */
+[data-testid="stSidebar"] {
+    background: #0C2340;
+    border-right: 1px solid #1A3A5C;
+}
+[data-testid="stSidebar"] * { color: #D0E4F7 !important; }
+[data-testid="stSidebar"] h3 {
+    color: #7EB8E8 !important;
+    font-size: 0.75rem !important;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-weight: 700 !important;
+}
+[data-testid="stSidebar"] hr { border-color: #1E3F60 !important; }
+[data-testid="stSidebar"] .stButton > button {
+    background: #1565C0 !important;
+    color: #FFFFFF !important;
+    border: none !important;
+    border-radius: 6px !important;
+    font-weight: 700 !important;
+}
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] {
+    background: #0F2D4A !important;
+    border: 1.5px dashed #2E6DA4 !important;
+    border-radius: 8px !important;
+}
+
+/* ─── ラジオボタン ─────────────────────────────────────── */
+[data-testid="stRadio"] label { font-size: 0.85rem; }
+
+/* ─── チェックボックス ─────────────────────────────────── */
+[data-testid="stCheckbox"] label { font-size: 0.85rem; }
+
+/* ─── divider ──────────────────────────────────────────── */
+hr { border-color: #D0DFF0 !important; }
+</style>
+""", unsafe_allow_html=True)
 
 # ===========================================================================
 # 国交省基準DB読み込み
@@ -74,21 +194,16 @@ for _k in ["suryo_info", "df_match", "selected_idx"]:
     if _k not in st.session_state:
         st.session_state[_k] = None
 if "row_selections" not in st.session_state:
-    st.session_state["row_selections"] = {}   # {chain_key: {"出来形": [...], "品質管理": [...]}}
+    st.session_state["row_selections"] = {}
 
 # ===========================================================================
 # ヘルパー関数
 # ===========================================================================
 def _chain_key(row) -> tuple:
-    """行を一意に識別するキー。"""
     return tuple(str(row.get(c, "")) for c in SURYO_LEVEL_COLS)
 
 
 def _group_items(items: list) -> dict:
-    """
-    ラベルリストを工種でグループ化する。
-    "工種 / 種別 / 試験項目" → {工種: [(full_label, sub_label), ...]}
-    """
     grouped: dict = {}
     for item in items:
         parts = [p.strip() for p in item.split(" / ")]
@@ -113,21 +228,48 @@ def _depth(row) -> int:
     return d
 
 
+def _sec_header(label: str) -> None:
+    """ブルー左ボーダー付きセクションヘッダーを描画する。"""
+    st.markdown(
+        f'<div style="border-left:4px solid #1565C0; padding:5px 12px; '
+        f'background:#EBF3FD; border-radius:0 6px 6px 0; '
+        f'font-weight:700; color:#1F4E79; margin:10px 0 6px 0; '
+        f'font-size:0.95rem; letter-spacing:0.02em;">{label}</div>',
+        unsafe_allow_html=True,
+    )
+
+
 # ===========================================================================
-# サイドバー: DB情報 + アップロード
+# サイドバー: DB情報 + アップロード + 利用説明
 # ===========================================================================
 with st.sidebar:
+    # ── ロゴ風ヘッダー ──────────────────────────────────────
+    st.markdown(
+        '<div style="padding:12px 0 8px 0; text-align:center;">'
+        '<span style="font-size:1.6rem;">📋</span><br>'
+        '<span style="font-size:0.95rem; font-weight:700; '
+        'color:#A8D4F5; letter-spacing:0.06em;">施工管理計画</span><br>'
+        '<span style="font-size:0.7rem; color:#5A88B0; letter-spacing:0.1em;">'
+        'AUTO GENERATOR</span></div>',
+        unsafe_allow_html=True,
+    )
+    st.divider()
+
+    # ── DB情報 ───────────────────────────────────────────────
     st.markdown("### 📚 国交省基準DB")
     st.caption(f"バージョン: **{version_info.get('バージョン', '不明')}**")
     st.caption(f"作成日時: {version_info.get('作成日時', '不明')}")
     st.caption(
-        f"出来形管理 {len(kojyo_data['出来形管理'])}行 / "
+        f"出来形管理 {len(kojyo_data['出来形管理'])}行 ／ "
         f"品質管理 {len(kojyo_data['品質管理'])}行"
     )
     st.divider()
 
-    st.markdown("### 📄 数量総括表")
-    uploaded_file = st.file_uploader("PDFをアップロード", type="pdf", label_visibility="collapsed")
+    # ── アップロード ─────────────────────────────────────────
+    st.markdown("### 📄 数量総括表 PDF")
+    uploaded_file = st.file_uploader(
+        "PDFをアップロード", type="pdf", label_visibility="collapsed"
+    )
 
     if st.button("解析する", type="primary", disabled=not uploaded_file, use_container_width=True):
         try:
@@ -144,7 +286,6 @@ with st.sidebar:
                     kojyo_data["撮影箇所"],
                 )
 
-            # チェックボックス等の旧状態を全クリア
             for k in list(st.session_state.keys()):
                 if k.startswith(("chk_d_", "chk_h_", "chk_p_")):
                     del st.session_state[k]
@@ -161,19 +302,64 @@ with st.sidebar:
                 st.code(traceback.format_exc())
 
     st.divider()
+
+    # ── 利用説明書 ───────────────────────────────────────────
+    with st.expander("📖 利用説明書"):
+        st.markdown("""
+**STEP 1 — PDFをアップロード**
+数量総括表のPDFファイルを上の枠にドラッグ＆ドロップし、「解析する」を押します。
+
+---
+
+**STEP 2 — ① 数量総括表を確認**
+抽出された工種ツリーが表示されます。行の背景色で状態を確認できます。
+- 🟡 **候補あり** — 国交省基準DBにマッチした行
+- 🟢 **選択済み** — 候補を確認・選択済みの行
+- ⬜ **対象外** — DBマッチなし
+
+---
+
+**STEP 3 — ② DBマッピングを確認**
+各工種に対する出来形・品質管理・撮影箇所のマッチ結果を確認します。
+フィルタで「候補ありのみ」などに絞り込めます。
+
+---
+
+**STEP 4 — ③ 候補を選択**
+② の表から行をクリックすると、その行の詳細候補がチェックボックスで表示されます。
+不要な候補のチェックを外して絞り込みます。
+
+---
+
+**STEP 5 — 出力**
+右側の「📥 施工管理計画を出力」ボタンを押すとExcelを生成します。
+3シート構成（出来形管理 ／ 品質管理 ／ 撮影箇所）でダウンロードできます。
+
+---
+
+**基準DB更新時**
+国交省基準改定時は `python build_db.py` を再実行してDBを更新してください。
+""")
+
     st.caption("基準改定時は `python build_db.py` を実行")
 
 # ===========================================================================
 # ヘッダー
 # ===========================================================================
-h_l, h_r = st.columns([3, 2])
-with h_l:
-    st.markdown("## 📋 施工管理計画 自動生成アプリ")
-    st.caption("数量総括表 → DBマッピング → 施工管理計画出力")
-with h_r:
-    if st.session_state.suryo_info:
-        name = st.session_state.suryo_info.get("工事名", "")
-        st.success(f"**{name or '（工事名不明）'}**  \n📄 数量総括表 読込済み")
+st.markdown(
+    '<div style="background:linear-gradient(135deg,#0C2340 0%,#1565C0 100%); '
+    'color:#FFFFFF; padding:16px 24px; border-radius:8px; margin-bottom:4px;">'
+    '<span style="font-size:1.25rem; font-weight:700; letter-spacing:0.06em;">'
+    '📋 施工管理計画 自動生成アプリ</span><br>'
+    '<span style="font-size:0.78rem; color:#A8CCEF;">'
+    '数量総括表 PDF → 国交省基準 DBマッピング → 施工管理計画 Excel 出力</span>'
+    '</div>',
+    unsafe_allow_html=True,
+)
+
+if st.session_state.suryo_info:
+    name = st.session_state.suryo_info.get("工事名", "")
+    st.success(f"📄 **{name or '（工事名不明）'}**　 読込済み")
 
 # ===========================================================================
 # 未解析時
@@ -206,7 +392,6 @@ df_raw["_name"]  = df_raw.apply(_deepest_name, axis=1)
 df_raw["_depth"] = df_raw.apply(_depth, axis=1)
 df_raw.insert(0, "No", range(1, len(df_raw) + 1))
 
-# 統計
 n_total    = len(df_raw)
 n_selected = (df_raw["状態"] == "選択済み").sum()
 n_pending  = (df_raw["状態"] == "候補あり").sum()
@@ -217,26 +402,27 @@ n_out      = (df_raw["状態"] == "対象外").sum()
 # ===========================================================================
 st.divider()
 mc = st.columns(4)
-mc[0].metric("📊 総行数",         n_total)
-mc[1].metric("✅ 選択済み",       n_selected)
+mc[0].metric("総行数",             n_total)
+mc[1].metric("✅ 選択済み",        n_selected)
 mc[2].metric("⚠️ 候補あり（未選択）", n_pending)
-mc[3].metric("➖ 対象外",         n_out)
+mc[3].metric("➖ 対象外",          n_out)
 st.divider()
 
 STATUS_BG = {"選択済み": "#E8F5E9", "候補あり": "#FFF9C4", "対象外": "#F5F5F5"}
 
+
 def _row_style(statuses: dict):
-    """行インデックス→ステータスの辞書を使って行背景色を返すスタイラー関数を生成。"""
     def _style(row):
         bg = STATUS_BG.get(statuses.get(row.name, ""), "")
         return [f"background-color: {bg}" if bg else "" for _ in row]
     return _style
 
+
 # ===========================================================================
 # ① 数量総括表ツリー（フルワイド）
 # ===========================================================================
-st.markdown("**① 数量総括表（元データ）**")
-st.caption("※『直接工事費』以下は対象外として除外済み　行をクリックすると下部に詳細が表示されます")
+_sec_header("① 数量総括表（元データ）")
+st.caption("※「直接工事費」以下は除外済み　　行をクリック → 下部③に詳細・候補が表示されます")
 
 statuses_tree = df_raw["状態"].reset_index(drop=True).to_dict()
 df_tree = pd.DataFrame({
@@ -261,12 +447,12 @@ ev_l = st.dataframe(
 if ev_l.selection.rows:
     st.session_state.selected_idx = ev_l.selection.rows[0]
 
-st.caption("🟢 選択済み　🟡 候補あり　灰 対象外")
+st.caption("🟢 選択済み　　🟡 候補あり（未選択）　　⬜ 対象外")
 
 # ===========================================================================
 # ② DBマッピング一覧（フルワイド）
 # ===========================================================================
-st.markdown("**② DBマッピング一覧**")
+_sec_header("② DBマッピング一覧")
 
 filter_opt = st.radio(
     "フィルタ",
@@ -284,6 +470,7 @@ df_view = (
     if filter_opt in FILTER_MAP else df_raw.copy()
 )
 
+
 def _fmt_match(v: str) -> str:
     items = [x.strip() for x in str(v).split("\n") if x.strip()]
     if not items:
@@ -293,13 +480,14 @@ def _fmt_match(v: str) -> str:
     first_kojyo = items[0].split(" / ")[0]
     return f"{first_kojyo}（他{len(items) - 1}件）"
 
+
 statuses_map = df_view["状態"].reset_index(drop=True).to_dict()
 df_map = pd.DataFrame({
-    "工種・行名":   ["　" * d + n for d, n in zip(df_view["_depth"].values, df_view["_name"].values)],
+    "工種・行名":    ["　" * d + n for d, n in zip(df_view["_depth"].values, df_view["_name"].values)],
     "出来形マッチ":  [_fmt_match(v) for v in df_view["出来形マッチ"]],
     "品質管理マッチ": [_fmt_match(v) for v in df_view["品質管理マッチ"]],
     "撮影箇所マッチ": [_fmt_match(v) for v in df_view.get("撮影箇所マッチ", [""] * len(df_view))],
-    "状態":        list(statuses_map.values()),
+    "状態":         list(statuses_map.values()),
 })
 
 ev_m = st.dataframe(
@@ -310,11 +498,11 @@ ev_m = st.dataframe(
     selection_mode="single-row",
     on_select="rerun",
     column_config={
-        "工種・行名":   st.column_config.TextColumn(width="medium"),
+        "工種・行名":    st.column_config.TextColumn(width="medium"),
         "出来形マッチ":  st.column_config.TextColumn(width="medium"),
         "品質管理マッチ": st.column_config.TextColumn(width="medium"),
         "撮影箇所マッチ": st.column_config.TextColumn(width="medium"),
-        "状態":        st.column_config.TextColumn(width="small"),
+        "状態":         st.column_config.TextColumn(width="small"),
     },
 )
 if ev_m.selection.rows:
@@ -324,13 +512,13 @@ if ev_m.selection.rows:
 st.divider()
 
 # ===========================================================================
-# ② + ③ 下部 2カラム: 候補選択（左）+ 出力（右）
+# ③ + ④ 下部 2カラム: 候補選択（左）+ 出力（右）
 # ===========================================================================
 col_detail, col_out = st.columns([3, 2])
 
-# ── ② 左: 選択行の詳細・候補選択 ────────────────────────────────────────
+# ── ③ 左: 選択行の詳細・候補選択 ─────────────────────────────────────
 with col_detail:
-    st.markdown("**② 候補選択**")
+    _sec_header("③ 候補選択")
 
     sel_idx = st.session_state.selected_idx
 
@@ -339,7 +527,7 @@ with col_detail:
         ckey = _chain_key(sel)
 
         chain = " › ".join(sel[c] for c in SURYO_LEVEL_COLS if sel.get(c, ""))
-        st.info(f"**{sel['_name']}**  \n{chain}")
+        st.info(f"**{sel['_name']}**　　{chain}")
 
         match_d = str(sel.get("出来形マッチ", "")).strip()
         match_h = str(sel.get("品質管理マッチ", "")).strip()
@@ -352,7 +540,7 @@ with col_detail:
             st.caption("この行はDBマッチなし（対象外）")
             sel_d, sel_h, sel_p = [], [], []
         else:
-            st.markdown("該当する候補にチェックを入れてください。")
+            st.caption("出力に含める候補にチェックを入れてください。")
 
             c_d, c_h, c_p = st.columns(3)
 
@@ -418,17 +606,13 @@ with col_detail:
                 st.caption(f"DB目次: {bc}")
 
     else:
-        st.info("↑ 上の表から行を選択してください")
+        st.info("↑ 上の表から行をクリックすると候補が表示されます")
 
-# ── ③ 右: 出力 ────────────────────────────────────────────────────────────
+# ── ④ 右: 出力 ─────────────────────────────────────────────────────────
 with col_out:
-    st.markdown("**③ 施工管理計画を出力**")
+    _sec_header("④ 施工管理計画を出力")
 
     def _collect_labels():
-        """
-        全行の選択状態を集約してラベルリストを返す。
-        未選択行（row_selectionsにキーなし）は全候補を採用。
-        """
         out_d: list = []
         out_h: list = []
         out_p: list = []
@@ -444,8 +628,8 @@ with col_out:
             all_h = [x.strip() for x in str(row.get("品質管理マッチ", "")).split("\n") if x.strip()]
             all_p = [x.strip() for x in str(row.get("撮影箇所マッチ", "")).split("\n") if x.strip()]
 
-            labels_d = saved["出来形"]            if saved is not None else all_d
-            labels_h = saved["品質管理"]          if saved is not None else all_h
+            labels_d = saved["出来形"]             if saved is not None else all_d
+            labels_h = saved["品質管理"]           if saved is not None else all_h
             labels_p = saved.get("撮影箇所", all_p) if saved is not None else all_p
 
             for lbl in labels_d:
@@ -461,9 +645,17 @@ with col_out:
         return out_d, out_h, out_p
 
     out_d_labels, out_h_labels, out_p_labels = _collect_labels()
-    st.caption(
-        f"出来形 {len(out_d_labels)}項目 / 品質管理 {len(out_h_labels)}項目 / "
-        f"撮影箇所 {len(out_p_labels)}項目 を出力対象  \n（未確認行は全候補を採用）"
+
+    # 出力サマリ
+    st.markdown(
+        f'<div style="background:#EBF3FD; border-radius:6px; '
+        f'padding:10px 14px; font-size:0.85rem; color:#1F4E79; margin-bottom:10px;">'
+        f'出来形管理　<strong>{len(out_d_labels)}</strong> 項目<br>'
+        f'品質管理　　<strong>{len(out_h_labels)}</strong> 項目<br>'
+        f'撮影箇所　　<strong>{len(out_p_labels)}</strong> 項目<br>'
+        f'<span style="font-size:0.75rem; color:#4A6FA5;">※ 未確認行は全候補を採用</span>'
+        f'</div>',
+        unsafe_allow_html=True,
     )
 
     if st.button(
