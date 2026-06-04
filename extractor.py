@@ -147,6 +147,9 @@ def extract_dekigata(施工管理基準_path: str) -> pd.DataFrame:
     # セル結合の復元: 編〜工種, 測定基準, 測定箇所, 摘要 を前方補完
     df = _forward_fill(df, ["編", "章", "節", "条", "枝番", "工種", "測定基準", "測定箇所", "摘要"])
 
+    # 工種名のクリーニング（OCRスペース・脚注を除去）
+    df["工種"] = df["工種"].apply(_clean_hinshitsu_kojyo)
+
     # 測定項目が空の行（ページ区切り等の残骸）を除去
     df = df[df["測定項目"].str.strip() != ""].reset_index(drop=True)
 
