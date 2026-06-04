@@ -361,21 +361,22 @@ def _expand_with_junyo(df: pd.DataFrame, junyo_pairs: list) -> pd.DataFrame:
     準用ペア (alias, base) に基づき、base工種の行をalias工種名で複製して追加する。
 
     - alias が既に df に存在する場合はスキップ
+    - 同じ alias に複数の base がある場合（例: 排水構造物工→側溝工 かつ →集水桝工）は
+      全ての base の行をまとめて追加する
     - base のマッチングは正規化後の部分一致で行う
     """
     existing = set(df["工種"].unique())
     norm_existing = {_normalize(k): k for k in existing}
 
-    extra_rows = []
-    seen_aliases: set = set()
+    # alias → [base_rows, ...] で集約してから追加
+    alias_rows: dict = {}
 
     for alias, base in junyo_pairs:
-        if alias in existing or alias in seen_aliases:
-            continue
+        if alias in existing:
+            continue  # 既に基準値として存在する工種はスキップ
 
         norm_base = _normalize(base)
         matched_base = None
-        # 完全一致 → 部分一致の順で探す
         if norm_base in norm_existing:
             matched_base = norm_existing[norm_base]
         else:
@@ -389,8 +390,14 @@ def _expand_with_junyo(df: pd.DataFrame, junyo_pairs: list) -> pd.DataFrame:
 
         base_rows = df[df["工種"] == matched_base].copy()
         base_rows["工種"] = alias
-        extra_rows.append(base_rows)
-        seen_aliases.add(alias)
+        alias_rows.setdefault(alias, []).append(base_rows)
+
+    extra_rows = []
+    for alias, dfs in alias_rows.items():
+        combined = pd.concat(dfs, ignore_index=True).drop_duplicates(
+            subset=["測定項目"], keep="first"
+        )
+        extra_rows.append(combined)
 
     if extra_rows:
         df = pd.concat([df] + extra_rows, ignore_index=True)
