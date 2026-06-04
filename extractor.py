@@ -288,7 +288,10 @@ def extract_photo(写真管理基準_path: str) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 # 準用一覧表の有効列数（目次テーブル）
-_JUNYO_VALID_COL_COUNTS = {8, 9}
+# 7列: ヘッダー行なし [章, 条, 枝番, 工種, 種別, 準用, 頁]
+# 8列: ヘッダー行あり [章, 条, 枝番, 工種, 種別, 準用, 頁, ...]
+# 9列: ヘッダー行あり
+_JUNYO_VALID_COL_COUNTS = {7, 8, 9}
 # 準用一覧表のページ範囲
 _JUNYO_START_PAGE = 5
 _JUNYO_END_PAGE   = 20
@@ -325,20 +328,28 @@ def extract_junyo_index(施工管理基準_path: str) -> list:
                 if not table or len(table[0]) not in _JUNYO_VALID_COL_COUNTS:
                     continue
 
-                # ヘッダー行を探して 工種・準用 列のインデックスを特定
-                kojyo_idx = junyo_idx = None
-                for row in table[:3]:
-                    cells = [_clean(c) for c in row]
-                    for i, v in enumerate(cells):
-                        if v in {"工種", "工 種"}:
-                            kojyo_idx = i
-                        if "準用" in v:
-                            junyo_idx = i
-                    if kojyo_idx is not None and junyo_idx is not None:
-                        break
+                # 列数に基づいてインデックスを決定する
+                # 全テーブル共通: 工種=col[-4], 準用=col[-2]
+                ncols = len(table[0])
+                kojyo_idx = ncols - 4
+                junyo_idx = ncols - 2
 
-                if kojyo_idx is None or junyo_idx is None:
-                    continue
+                # ヘッダー行があるテーブル(8/9列)はキーワードで上書き検証
+                if ncols >= 8:
+                    hdr_kojyo = hdr_junyo = None
+                    for row in table[:3]:
+                        cells = [_clean(c) for c in row]
+                        for i, v in enumerate(cells):
+                            if v in {"工種", "工 種"}:
+                                hdr_kojyo = i
+                            if "準用" in v:
+                                hdr_junyo = i
+                        if hdr_kojyo is not None and hdr_junyo is not None:
+                            break
+                    if hdr_kojyo is not None:
+                        kojyo_idx = hdr_kojyo
+                    if hdr_junyo is not None:
+                        junyo_idx = hdr_junyo
 
                 for row in table:
                     if len(row) <= max(kojyo_idx, junyo_idx):
