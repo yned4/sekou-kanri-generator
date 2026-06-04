@@ -377,13 +377,14 @@ with st.sidebar:
                  and st.session_state.selected_idx < len(st.session_state.df_match))
 
     NAV = [
-        ("upload",    "① 取込",    True),
-        ("structure", "② 構造化",  has_data),
+        ("upload",    "① 取込",      True),
+        ("structure", "② 構造化",    has_data),
         ("matching",  "③ マッチング", has_data),
-        ("candidate", "④ 候補選択", has_sel),
     ]
     for key, label, enabled in NAV:
-        btn_type = "primary" if page==key else "secondary"
+        # candidate ページにいるときは matching をアクティブ扱い
+        is_active = (page == key) or (page == "candidate" and key == "matching")
+        btn_type = "primary" if is_active else "secondary"
         if st.button(label, use_container_width=True,
                      type=btn_type, disabled=not enabled, key=f"nav_{key}"):
             st.session_state.page = key
@@ -592,7 +593,7 @@ def _render_structure():
         st.session_state.page = "matching"; st.rerun()
 
 # ===========================================================================
-# ③ マッチングページ
+# ③ マッチング＋候補選択（同一ページ）
 # ===========================================================================
 def _render_matching():
     df_raw = _get_df_raw()
@@ -603,9 +604,8 @@ def _render_matching():
     st.markdown(
         '<div class="page-card">'
         '<div class="page-card-title">③ マッチング — 国交省基準DBとの対応確認</div>'
-        '<div class="page-card-sub">'
-        '行をクリックすると「④候補選択」タブで詳細を確認できます'
-        '</div></div>',
+        '<div class="page-card-sub">行をクリックすると下部に候補選択パネルが展開されます</div>'
+        '</div>',
         unsafe_allow_html=True,
     )
 
@@ -640,6 +640,10 @@ def _render_matching():
         cats = (["出来形"] if d else [])+(["品質"] if h else [])+(["撮影"] if p else [])
         return f"候補{len(dl)}件（工法で分岐）" if len(dl)>=2 else "・".join(cats)
 
+    sel_idx = st.session_state.selected_idx
+    has_sel = sel_idx is not None and 0 <= sel_idx < len(df_raw)
+    tbl_h   = 230 if has_sel else 430   # 候補パネル表示時はテーブルを縮める
+
     sts_idx = {i: row["状態"] for i,(_,row) in enumerate(df_v.iterrows())}
     df_tbl = pd.DataFrame({
         "工種・項目":    ["　"*row["_depth"]+row["_name"] for _,row in df_v.iterrows()],
@@ -655,7 +659,7 @@ def _render_matching():
 
     ev = st.dataframe(
         df_tbl.style.apply(_rs(sts_idx),axis=1),
-        use_container_width=True, height=450, hide_index=True,
+        use_container_width=True, height=tbl_h, hide_index=True,
         selection_mode="single-row", on_select="rerun",
         column_config={
             "工種・項目":    st.column_config.TextColumn(width="large"),
@@ -663,87 +667,83 @@ def _render_matching():
             "状態":         st.column_config.TextColumn(width="small"),
         },
     )
-
-    # 行クリック → 候補選択タブに自動遷移
     if ev.selection.rows:
         no = int(df_v.iloc[ev.selection.rows[0]]["No"])
-        st.session_state.selected_idx = no - 1
-        st.session_state.page = "candidate"
-        st.rerun()
+        if st.session_state.selected_idx != no - 1:
+            st.session_state.selected_idx = no - 1
+            st.rerun()
 
     st.markdown(
         '<div class="legend">'
         '<span><span class="ldot" style="background:#1B6E2A"></span>確定</span>'
-        '<span><span class="ldot" style="background:#B45309"></span>要選択（クリックで選択）</span>'
+        '<span><span class="ldot" style="background:#B45309"></span>要選択（行クリックで候補展開）</span>'
         '<span><span class="ldot" style="background:#9E9E9E"></span>未マッチ</span>'
         '</div>',
         unsafe_allow_html=True,
     )
 
-# ===========================================================================
-# ④ 候補選択ページ
-# ===========================================================================
-def _render_candidate():
-    df_raw  = _get_df_raw()
-    sel_idx = st.session_state.selected_idx
-    n_yo    = int((df_raw["状態"]=="要選択").sum())
-
-    # 前/次ナビ
-    yo_idxs = [i for i,(_,r) in enumerate(df_raw.iterrows()) if r["状態"]=="要選択"]
-    cur_pos  = yo_idxs.index(sel_idx) if sel_idx in yo_idxs else None
-
-    col_back, col_title, col_next = st.columns([1, 4, 1])
-    with col_back:
-        if st.button("← 戻る", key="go_back_matching"):
-            st.session_state.page = "matching"; st.rerun()
-    with col_title:
-        sel  = df_raw.iloc[sel_idx]
-        chain = " › ".join(sel[c] for c in SURYO_LEVEL_COLS if sel.get(c,""))
+    # ── 候補選択パネル（テーブル直下） ──────────────────────
+    if not has_sel:
         st.markdown(
-            f'<div class="page-card" style="margin-bottom:8px;">'
-            f'<div class="page-card-title">④ 候補選択</div>'
-            f'<div class="page-card-sub">'
-            f'<strong>{sel["_name"]}</strong>　{chain}'
-            f'</div></div>',
+            '<div style="margin-top:10px;padding:18px;background:#FFF;'
+            'border:1px dashed #D8DCE4;border-radius:8px;text-align:center;'
+            'color:#AAAAAA;font-size:.84rem;">'
+            '行をクリックすると候補がここに展開されます</div>',
             unsafe_allow_html=True,
         )
-    with col_next:
-        if cur_pos is not None and cur_pos < len(yo_idxs)-1:
-            if st.button("次の要選択 →", key="go_next_yo"):
-                st.session_state.selected_idx = yo_idxs[cur_pos+1]; st.rerun()
+        return
 
-    # 進捗
-    if cur_pos is not None:
-        done  = sum(1 for i in yo_idxs[:cur_pos+1]
-                    if _chain_key(df_raw.iloc[i]) in st.session_state.row_selections)
-        total = len(yo_idxs)
-        st.caption(f"要選択 {total} 件中 {done} 件確定済み　（現在：{cur_pos+1}/{total}）")
-        st.progress(done/total if total else 0)
+    sel    = df_raw.iloc[sel_idx]
+    ckey   = _chain_key(sel)
+    chain  = " › ".join(sel[c] for c in SURYO_LEVEL_COLS if sel.get(c,""))
 
-    ckey    = _chain_key(sel)
+    # 要選択の前後ナビ用
+    yo_idxs = [i for i,(_,r) in enumerate(df_raw.iterrows()) if r["状態"]=="要選択"]
+    cur_pos = yo_idxs.index(sel_idx) if sel_idx in yo_idxs else None
+
     items_d = [x.strip() for x in str(sel.get("出来形マッチ","")).split("\n") if x.strip()]
     items_h = [x.strip() for x in str(sel.get("品質管理マッチ","")).split("\n") if x.strip()]
     items_p = [x.strip() for x in str(sel.get("撮影箇所マッチ","")).split("\n") if x.strip()]
 
     if not items_d and not items_h and not items_p:
-        st.info("この行はDBマッチなし（未マッチ）です。")
+        st.markdown(
+            f'<div style="margin-top:10px;padding:14px;background:#F9FAFB;'
+            f'border:1px solid #DDD;border-radius:8px;font-size:.84rem;color:#888;">'
+            f'「{sel["_name"]}」はDBマッチなし（未マッチ）</div>',
+            unsafe_allow_html=True,
+        )
         return
 
     saved = st.session_state.row_selections.get(ckey)
 
-    # ── 出来形 比較カード ─────────────────────────────────────
+    # 進捗（要選択行のみ）
+    if cur_pos is not None and yo_idxs:
+        done  = sum(1 for i in yo_idxs
+                    if _chain_key(df_raw.iloc[i]) in st.session_state.row_selections)
+        total = len(yo_idxs)
+        prog_col, nav_col = st.columns([5, 1])
+        with prog_col:
+            st.progress(done/total, text=f"要選択 {total} 件中 {done} 件確定済み")
+        with nav_col:
+            if cur_pos < len(yo_idxs)-1:
+                if st.button("次へ →", key="cand_next"):
+                    st.session_state.selected_idx = yo_idxs[cur_pos+1]; st.rerun()
+
+    st.markdown(
+        f'<div class="cand-panel">'
+        f'<div class="cand-hdr">⚠ {sel["_name"]}'
+        f'<span style="font-weight:400;font-size:.76rem;margin-left:8px;">{chain}</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    # 出来形 比較カード
     new_sel_d = []
     if len(items_d) >= 2:
         db_rows_d = [_lookup_db(lbl,"出来形管理") for lbl in items_d[:4]]
         diff_d    = _diff_cols(db_rows_d, _DISP_D)
         cur_d     = saved["出来形"] if saved else items_d
-
-        st.markdown(
-            f'<div class="cand-panel">'
-            f'<div class="cand-hdr">⚠ 工法を選択してください（残り {n_yo} 件）</div>',
-            unsafe_allow_html=True,
-        )
-        cols_c = st.columns(min(len(items_d),4))
+        cols_c    = st.columns(min(len(items_d),4))
         for i,(col,lbl) in enumerate(zip(cols_c, items_d[:4])):
             with col:
                 parts  = [p.strip() for p in lbl.split(" / ")]
@@ -762,20 +762,18 @@ def _render_candidate():
                     new_sel_d.append(lbl)
         if diff_d:
             st.markdown(
-                f'<div class="cand-foot">'
-                f'ⓘ 差分（{"・".join(sorted(diff_d))}）をハイライト表示</div>',
+                f'<div class="cand-foot">ⓘ 差分（{"・".join(sorted(diff_d))}）をハイライト表示</div>',
                 unsafe_allow_html=True,
             )
-        st.markdown('</div>', unsafe_allow_html=True)
     else:
         new_sel_d = items_d
-        if items_d:
-            st.info(f"出来形管理：{items_d[0]}（1件のみ・自動確定）")
 
-    # ── 品質管理・撮影箇所 ────────────────────────────────────
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # 品質・撮影 expander
     new_sel_h, new_sel_p = items_h, items_p
     if items_h or items_p:
-        with st.expander("品質管理・撮影箇所の候補を調整", expanded=False):
+        with st.expander("品質管理・撮影箇所の候補を調整"):
             ch,cp = st.columns(2)
             with ch:
                 new_sel_h = []
@@ -806,7 +804,6 @@ def _render_candidate():
         "撮影箇所": new_sel_p,
     }
 
-    # DB目次
     if items_d:
         fd = items_d[0].split(" / ")[0]
         dr = kojyo_data["出来形管理"][kojyo_data["出来形管理"]["工種"]==fd]
@@ -814,17 +811,6 @@ def _render_candidate():
             r = dr.iloc[0]
             bc = " › ".join(x for x in [r.get("編",""),r.get("章",""),r.get("節",""),fd] if x)
             st.caption(f"DB 目次：{bc}")
-
-    # 次の要選択へ
-    if cur_pos is not None and cur_pos < len(yo_idxs)-1:
-        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-        if st.button("確定して次の要選択へ →", type="primary", key="confirm_next"):
-            st.session_state.selected_idx = yo_idxs[cur_pos+1]
-            st.rerun()
-    else:
-        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-        if st.button("③ マッチング一覧に戻る", key="back_to_matching"):
-            st.session_state.page = "matching"; st.rerun()
 
 # ===========================================================================
 # 基準DB確認
@@ -855,9 +841,7 @@ if page == "db_view":
     _render_db_view()
 elif page == "structure" and has_data:
     _render_structure()
-elif page == "matching" and has_data:
+elif page in ("matching", "candidate") and has_data:
     _render_matching()
-elif page == "candidate" and has_sel:
-    _render_candidate()
 else:
     _render_upload()
