@@ -284,6 +284,121 @@ def extract_photo(写真管理基準_path: str) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# 準用一覧表（p5-20）の抽出と出来形管理DB展開
+# ---------------------------------------------------------------------------
+
+# 準用一覧表の有効列数（目次テーブル）
+_JUNYO_VALID_COL_COUNTS = {8, 9}
+# 準用一覧表のページ範囲
+_JUNYO_START_PAGE = 5
+_JUNYO_END_PAGE   = 20
+
+
+def _parse_junyo_kojyo(junyo_str: str) -> str:
+    """
+    準用する出来形管理基準の文字列から工種名を抽出する。
+    例: "1-2-4-3路体盛土工" → "路体盛土工"
+         "3-2-3-17根固めブロック工" → "根固めブロック工"
+    """
+    s = _clean_hinshitsu_kojyo(_clean(junyo_str))
+    # 先頭の節番号（数字とハイフン）を除去
+    s = re.sub(r'^\d[\d\-]+', '', s).strip()
+    return s
+
+
+def extract_junyo_index(施工管理基準_path: str) -> list:
+    """
+    準用一覧表（p5-20）から (alias_工種, base_工種) ペアを抽出する。
+
+    「準用する出来形管理基準」列が空でない行のみ対象。
+    alias == base の場合（工種名が同じ）は除外する。
+
+    Returns:
+        list of (alias_工種名, base_工種名)
+    """
+    entries = []
+
+    with pdfplumber.open(施工管理基準_path) as pdf:
+        for p_num in range(_JUNYO_START_PAGE, _JUNYO_END_PAGE + 1):
+            page = pdf.pages[p_num - 1]
+            for table in page.extract_tables():
+                if not table or len(table[0]) not in _JUNYO_VALID_COL_COUNTS:
+                    continue
+
+                # ヘッダー行を探して 工種・準用 列のインデックスを特定
+                kojyo_idx = junyo_idx = None
+                for row in table[:3]:
+                    cells = [_clean(c) for c in row]
+                    for i, v in enumerate(cells):
+                        if v in {"工種", "工 種"}:
+                            kojyo_idx = i
+                        if "準用" in v:
+                            junyo_idx = i
+                    if kojyo_idx is not None and junyo_idx is not None:
+                        break
+
+                if kojyo_idx is None or junyo_idx is None:
+                    continue
+
+                for row in table:
+                    if len(row) <= max(kojyo_idx, junyo_idx):
+                        continue
+                    alias = _clean_hinshitsu_kojyo(_clean(row[kojyo_idx]))
+                    junyo = _clean(row[junyo_idx])
+                    if not alias or not junyo:
+                        continue
+                    if alias in {"工種", "工 種"}:
+                        continue
+                    base = _parse_junyo_kojyo(junyo)
+                    if base and alias != base:
+                        entries.append((alias, base))
+
+    return entries
+
+
+def _expand_with_junyo(df: pd.DataFrame, junyo_pairs: list) -> pd.DataFrame:
+    """
+    準用ペア (alias, base) に基づき、base工種の行をalias工種名で複製して追加する。
+
+    - alias が既に df に存在する場合はスキップ
+    - base のマッチングは正規化後の部分一致で行う
+    """
+    existing = set(df["工種"].unique())
+    norm_existing = {_normalize(k): k for k in existing}
+
+    extra_rows = []
+    seen_aliases: set = set()
+
+    for alias, base in junyo_pairs:
+        if alias in existing or alias in seen_aliases:
+            continue
+
+        norm_base = _normalize(base)
+        matched_base = None
+        # 完全一致 → 部分一致の順で探す
+        if norm_base in norm_existing:
+            matched_base = norm_existing[norm_base]
+        else:
+            for nk, k in norm_existing.items():
+                if norm_base in nk or nk in norm_base:
+                    matched_base = k
+                    break
+
+        if matched_base is None:
+            continue
+
+        base_rows = df[df["工種"] == matched_base].copy()
+        base_rows["工種"] = alias
+        extra_rows.append(base_rows)
+        seen_aliases.add(alias)
+
+    if extra_rows:
+        df = pd.concat([df] + extra_rows, ignore_index=True)
+
+    return df
+
+
+# ---------------------------------------------------------------------------
 # メインインターフェース
 # ---------------------------------------------------------------------------
 
@@ -302,7 +417,12 @@ def extract_from_pdf(施工管理基準_path: str, 写真管理基準_path: str)
 
     print("[ 1/3 ] 出来形管理基準を抽出中...")
     result["出来形管理"] = extract_dekigata(施工管理基準_path)
-    print(f"        → {len(result['出来形管理'])} 行取得")
+    print(f"        → {len(result['出来形管理'])} 行取得（基準値）")
+
+    print("        準用一覧表（各編→共通編）を展開中...")
+    junyo_pairs = extract_junyo_index(施工管理基準_path)
+    result["出来形管理"] = _expand_with_junyo(result["出来形管理"], junyo_pairs)
+    print(f"        → {len(result['出来形管理'])} 行（準用展開後）")
 
     print("[ 2/3 ] 品質管理基準を抽出中...")
     result["品質管理"] = extract_hinshitsu(施工管理基準_path)
