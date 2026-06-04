@@ -28,7 +28,7 @@ PHOTO_DEKIGATA_END    = 74  # 撮影箇所一覧表（出来形管理）終了
 
 # ===== 有効列数フィルタ =====
 # ページによっては図や注釈がテーブルとして誤認識される。列数で本文テーブルのみ抽出する。
-DEKIGATA_VALID_COL_COUNTS  = {12, 13}  # 12=標準, 13=面管理（規格値が2列になる）
+DEKIGATA_VALID_COL_COUNTS  = {11, 12, 13, 14}  # 11=規格値1列, 12=標準, 13=面管理, 14=規格値4分割
 HINSHITSU_VALID_COL_COUNTS = {9}
 PHOTO_5COL_VALID            = {5}       # 全体・品質管理セクション
 PHOTO_9COL_VALID            = {9}       # 出来形管理セクション
@@ -126,9 +126,16 @@ def extract_dekigata(施工管理基準_path: str) -> pd.DataFrame:
         if _row_contains(row[:1], DEKIGATA_HEADER_KEYWORDS):
             continue
 
-        # 12列 → 13列に正規化（「規格値_個々」列を index 9 に挿入）
-        if len(row) == 12:
+        # 各列数 → 13列に正規化
+        if len(row) == 11:
+            # 規格値が1列のみ: 規格値_条件="" / 規格値=col[7] / 規格値_個々="" を補完
+            row = list(row[:7]) + ["", row[7], ""] + list(row[8:])
+        elif len(row) == 12:
+            # 規格値が2列: 規格値_個々="" を index 9 に挿入
             row = list(row[:9]) + [""] + list(row[9:])
+        elif len(row) == 14:
+            # 規格値が4分割（個々・中規模/小規模, 平均・中規模/小規模）: col[10]を除去
+            row = list(row[:10]) + list(row[11:])
 
         cleaned.append([_clean(c) for c in row[:13]])
 
@@ -199,8 +206,10 @@ def extract_hinshitsu(施工管理基準_path: str) -> pd.DataFrame:
     df = pd.DataFrame(cleaned, columns=HINSHITSU_COLS)
     df = _forward_fill(df, ["工種", "種別"])
 
-    # 工種名のクリーニング（番号・OCRスペース・脚注を除去）
-    df["工種"] = df["工種"].apply(_clean_hinshitsu_kojyo)
+    # 工種・種別・試験区分のクリーニング（番号・OCRスペース・脚注を除去）
+    df["工種"]   = df["工種"].apply(_clean_hinshitsu_kojyo)
+    df["種別"]   = df["種別"].apply(_clean_hinshitsu_kojyo)
+    df["試験区分"] = df["試験区分"].apply(_clean_hinshitsu_kojyo)
 
     # 試験項目が空の行を除去
     df = df[df["試験項目"].str.strip() != ""].reset_index(drop=True)
@@ -680,6 +689,52 @@ def _expand_to_rows(matched_kojyo: list, full_df: pd.DataFrame, detail_cols: lis
     return "\n".join(labels)
 
 
+# 種別のソート順（材料 → 施工 → その他）
+_SHIKEN_KUBUN_ORDER = {"材料": 0, "施工": 1, "施工前試験": 2, "施工後試験": 3}
+
+
+def _expand_hinshitsu_rows(matched_kojyo: list, full_df: pd.DataFrame) -> str:
+    """
+    品質管理マッチ専用の行展開。
+
+    - マッチした DB の工種名を保持してラベルを生成する
+    - 工種ごとに種別（材料→施工→施工前試験→施工後試験→その他）の順にソートして並べる
+    - 工種に1行のみ存在 → "工種名"
+    - 工種に複数行存在 → "工種名 / 種別 / 試験項目" を行ごとに改行区切り
+    """
+    if not matched_kojyo:
+        return ""
+
+    labels = []
+    for kojyo in matched_kojyo:
+        rows = full_df[full_df["工種"] == kojyo].copy()
+        if rows.empty:
+            labels.append(kojyo)
+            continue
+
+        # 種別でソート
+        if "種別" in rows.columns:
+            rows["_sort_key"] = rows["種別"].apply(
+                lambda x: _SHIKEN_KUBUN_ORDER.get(str(x).strip(), 99)
+            )
+            rows = rows.sort_values("_sort_key")
+
+        if len(rows) == 1:
+            labels.append(kojyo)
+        else:
+            for _, r in rows.iterrows():
+                parts = [kojyo]
+                for col in ["種別", "試験項目"]:
+                    v = str(r.get(col, "") or "").strip()
+                    if v:
+                        parts.append(v)
+                label = " / ".join(parts)
+                if label not in labels:
+                    labels.append(label)
+
+    return "\n".join(labels)
+
+
 def _expand_photo_rows(
     matched_kojyo_d: list,
     matched_kojyo_h: list,
@@ -761,7 +816,7 @@ def build_match_detail(
             "細別":          cd.get("細別", ""),
             "名称":          cd.get("名称", ""),
             "出来形マッチ":   _expand_to_rows(md, db_dekigata_df, ["測定項目"]),
-            "品質管理マッチ": _expand_to_rows(mh, db_hinshitsu_df, ["種別", "試験項目"]),
+            "品質管理マッチ": _expand_hinshitsu_rows(mh, db_hinshitsu_df),
             "撮影箇所マッチ": photo_match,
         })
 
