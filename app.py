@@ -226,6 +226,13 @@ hr{border-color:#E2E6EA!important;}
 # ===========================================================================
 # DB 読み込み
 # ===========================================================================
+def _sort_key(s: str) -> int:
+    """全幅・半幅数字を含む先頭数字を整数化してソートキーにする。"""
+    t = s.translate(str.maketrans("０１２３４５６７８９", "0123456789"))
+    m = re.match(r"(\d+)", t.strip())
+    return int(m.group(1)) if m else 9999
+
+
 @st.cache_data
 def load_kojyo_db():
     if not DB_PATH.exists():
@@ -235,6 +242,16 @@ def load_kojyo_db():
         "品質管理":   pd.read_excel(str(DB_PATH), sheet_name=DB_HINSHITSU, dtype=str).fillna(""),
         "撮影箇所":   pd.read_excel(str(DB_PATH), sheet_name=DB_PHOTO,     dtype=str).fillna(""),
     }
+    # 編→章→節→条→枝番 の数値順にソート
+    df = data["出来形管理"]
+    sort_cols = ["編", "章", "節", "条", "枝番"]
+    for col in sort_cols:
+        if col in df.columns:
+            df[f"_s_{col}"] = df[col].map(_sort_key)
+    key_cols = [f"_s_{c}" for c in sort_cols if f"_s_{c}" in df.columns]
+    df = df.sort_values(key_cols).drop(columns=key_cols).reset_index(drop=True)
+    data["出来形管理"] = df
+
     df_ver = pd.read_excel(str(DB_PATH), sheet_name=SHEET_VERSION, dtype=str)
     ver = df_ver.iloc[0].to_dict() if not df_ver.empty else {}
     return data, ver
