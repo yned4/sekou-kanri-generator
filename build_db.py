@@ -70,15 +70,24 @@ def build(
     path_写真管理基準: str,
     version: str,
     note: str = "",
+    path_出来形管理=None,
+    dekigata_start=None,
+    dekigata_end=None,
 ) -> None:
     """
-    2つのPDFからデータを抽出してExcelデータベースを作成・更新する。
+    PDFからデータを抽出してExcelデータベースを作成・更新する。
 
+    path_出来形管理 を指定すると出来形管理を別PDFから抽出する。
     既存のDBファイルが存在する場合は上書き（最新版で置き換え）する。
     旧バージョンとの差分が必要な場合は手動でバックアップしてから実行すること。
     """
     print(f"[1/3] PDFを抽出中...")
-    data = extract_from_pdf(path_施工管理基準, path_写真管理基準)
+    data = extract_from_pdf(
+        path_施工管理基準, path_写真管理基準,
+        出来形管理_path=path_出来形管理,
+        dekigata_start=dekigata_start,
+        dekigata_end=dekigata_end,
+    )
 
     print(f"[2/3] Excelデータベースを書き込み中: {DB_PATH}")
     DB_PATH.parent.mkdir(exist_ok=True)
@@ -120,13 +129,23 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="国交省基準PDFからExcelDBを構築する")
     parser.add_argument("施工管理基準", nargs="?", default=DEFAULT_施工管理基準)
     parser.add_argument("写真管理基準", nargs="?", default=DEFAULT_写真管理基準)
-    parser.add_argument("--version", default="令和7年3月版", help="バージョン名（例: 令和7年3月版）")
-    parser.add_argument("--note",    default="",           help="改定メモ（任意）")
+    parser.add_argument("--version",      default="令和7年3月版", help="バージョン名（例: 令和7年3月版）")
+    parser.add_argument("--note",         default="",            help="改定メモ（任意）")
+    parser.add_argument("--dekigata-pdf", default=None,          help="出来形管理を別PDFから抽出する場合に指定")
+    parser.add_argument("--dekigata-start", type=int, default=None, help="出来形管理別PDF開始ページ（デフォルト:2）")
+    parser.add_argument("--dekigata-end",   type=int, default=None, help="出来形管理別PDF終了ページ（デフォルト:最終）")
     args = parser.parse_args()
+
+    # 別PDFのデフォルトページ範囲（表紙=p1 を除く p2〜末尾）
+    d_start = args.dekigata_start if args.dekigata_start else (2 if args.dekigata_pdf else None)
+    d_end   = args.dekigata_end   if args.dekigata_end   else None
 
     build(
         path_施工管理基準=args.施工管理基準,
         path_写真管理基準=args.写真管理基準,
         version=args.version,
         note=args.note,
+        path_出来形管理=args.dekigata_pdf,
+        dekigata_start=d_start,
+        dekigata_end=d_end,
     )

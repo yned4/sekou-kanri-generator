@@ -106,18 +106,25 @@ def _collect_rows(pdf, start_page: int, end_page: int, valid_col_counts: set) ->
 # 出来形管理基準及び規格値
 # ---------------------------------------------------------------------------
 
-def extract_dekigata(施工管理基準_path: str) -> pd.DataFrame:
+def extract_dekigata(施工管理基準_path: str,
+                     start_page=None,
+                     end_page=None) -> pd.DataFrame:
     """
     出来形管理基準及び規格値（案）を抽出する。
 
     ページ内に12列テーブル（標準）と13列テーブル（面管理）が混在するため、
     両方を13列に正規化して結合する。
+
+    start_page / end_page を指定すると定数を上書きして使用する（改訂版PDF対応）。
     """
     with pdfplumber.open(施工管理基準_path) as pdf:
-        raw_rows = _collect_rows(pdf, DEKIGATA_START_PAGE, DEKIGATA_END_PAGE, DEKIGATA_VALID_COL_COUNTS)
+        total = len(pdf.pages)
+        s = start_page if start_page is not None else DEKIGATA_START_PAGE
+        e = end_page   if end_page   is not None else min(DEKIGATA_END_PAGE, total)
+        raw_rows = _collect_rows(pdf, s, e, DEKIGATA_VALID_COL_COUNTS)
 
     if not raw_rows:
-        raise ValueError(f"出来形管理基準: p{DEKIGATA_START_PAGE}〜p{DEKIGATA_END_PAGE} からテーブルを取得できませんでした。")
+        raise ValueError(f"出来形管理基準: p{s}〜p{e} からテーブルを取得できませんでした。")
 
     cleaned = []
     for row in raw_rows:
@@ -420,9 +427,17 @@ def _expand_with_junyo(df: pd.DataFrame, junyo_pairs: list) -> pd.DataFrame:
 # メインインターフェース
 # ---------------------------------------------------------------------------
 
-def extract_from_pdf(施工管理基準_path: str, 写真管理基準_path: str) -> dict:
+def extract_from_pdf(施工管理基準_path: str,
+                     写真管理基準_path: str,
+                     出来形管理_path=None,
+                     dekigata_start=None,
+                     dekigata_end=None) -> dict:
     """
     2つのPDFからデータを抽出してdictで返す。
+
+    出来形管理_path を指定すると、出来形管理の抽出を別PDFから行う。
+    その場合、準用一覧表の展開はスキップする（別PDFには準用一覧表がない想定）。
+    dekigata_start / dekigata_end でページ範囲を上書き可能。
 
     Returns:
         {
@@ -434,13 +449,16 @@ def extract_from_pdf(施工管理基準_path: str, 写真管理基準_path: str)
     result = {}
 
     print("[ 1/3 ] 出来形管理基準を抽出中...")
-    result["出来形管理"] = extract_dekigata(施工管理基準_path)
-    print(f"        → {len(result['出来形管理'])} 行取得（基準値）")
-
-    print("        準用一覧表（各編→共通編）を展開中...")
-    junyo_pairs = extract_junyo_index(施工管理基準_path)
-    result["出来形管理"] = _expand_with_junyo(result["出来形管理"], junyo_pairs)
-    print(f"        → {len(result['出来形管理'])} 行（準用展開後）")
+    if 出来形管理_path:
+        result["出来形管理"] = extract_dekigata(出来形管理_path, dekigata_start, dekigata_end)
+        print(f"        → {len(result['出来形管理'])} 行取得（別PDF）")
+    else:
+        result["出来形管理"] = extract_dekigata(施工管理基準_path)
+        print(f"        → {len(result['出来形管理'])} 行取得（基準値）")
+        print("        準用一覧表（各編→共通編）を展開中...")
+        junyo_pairs = extract_junyo_index(施工管理基準_path)
+        result["出来形管理"] = _expand_with_junyo(result["出来形管理"], junyo_pairs)
+        print(f"        → {len(result['出来形管理'])} 行（準用展開後）")
 
     print("[ 2/3 ] 品質管理基準を抽出中...")
     result["品質管理"] = extract_hinshitsu(施工管理基準_path)
