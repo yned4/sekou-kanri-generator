@@ -142,10 +142,8 @@ def _write_sheet(
     ws.row_dimensions[3].height = 10
 
     # ── 行4: ヘッダー行 ─────────────────────────────────────
-    # A4 = 余白列（ヘッダースタイルで塗りつぶし）
-    a4 = ws.cell(row=4, column=1, value="")
-    a4.fill   = header_fill
-    a4.border = thin_border
+    # A4 = 余白列（フィルなし・ボーダーなし）
+    ws.cell(row=4, column=1, value="")
 
     for col_idx, col_name in enumerate(df.columns, start=2):  # B列=2
         cell = ws.cell(row=4, column=col_idx, value=col_name)
@@ -157,7 +155,9 @@ def _write_sheet(
     ws.row_dimensions[4].height = 30
 
     # ── 行5: ヘッダー続き行（高さ確保用・スタイルのみ） ──────
-    for col_idx in range(1, n_data_cols + 2):
+    # A5 = 余白列（フィルなし・ボーダーなし）
+    ws.cell(row=5, column=1, value="")
+    for col_idx in range(2, n_data_cols + 2):  # B列以降のみ
         cell = ws.cell(row=5, column=col_idx, value="")
         cell.fill   = header_fill
         cell.border = thin_border
