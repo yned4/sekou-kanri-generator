@@ -452,7 +452,28 @@ with st.sidebar:
                  and has_data
                  and st.session_state.selected_idx < len(st.session_state.df_match))
 
+    # ─ ワークフローナビ ──────────────────────────────────────
+    st.markdown("### WORKFLOW")
+    if st.button("① 取込", use_container_width=True,
+                 type="primary" if page=="upload" else "secondary", key="nav_upload"):
+        st.session_state.page = "upload"; st.rerun()
+    if st.button("② 構造化", use_container_width=True,
+                 type="primary" if page=="structure" else "secondary",
+                 disabled=not has_data, key="nav_structure"):
+        st.session_state.page = "structure"; st.rerun()
+    if st.button("③ マッチング", use_container_width=True,
+                 type="primary" if page=="matching" else "secondary",
+                 disabled=not has_data, key="nav_matching"):
+        st.session_state.page = "matching"; st.rerun()
+    if st.button("④ 出力", use_container_width=True,
+                 type="primary" if page=="output" else "secondary",
+                 disabled=not has_data, key="nav_output"):
+        st.session_state.page = "output"; st.rerun()
+
+    st.divider()
+
     # ─ その他ナビ ────────────────────────────────────────────
+    st.markdown("### TOOLS")
     if st.button("基準DB確認", use_container_width=True,
                  type="primary" if page=="db_view" else "secondary", key="nav_db"):
         st.session_state.page = "db_view"; st.rerun()
