@@ -1354,25 +1354,13 @@ def _render_help():
 #### フィルタの使い方
 """)
         st.markdown("""
-<div style="display:flex;gap:8px;margin:6px 0 16px;flex-wrap:wrap;">
-  <div style="background:#FFF;border:1px solid #E5E3DC;border-radius:6px;padding:8px 14px;font-size:.83rem;">
-    <div style="font-weight:700;color:#2C2C2A;margin-bottom:2px;">すべて</div>
-    <div style="color:#6B6A66;font-size:.78rem;">全行を表示</div>
-  </div>
-  <div style="background:#FBEBEC;border:1px solid #C01820;border-radius:6px;padding:8px 14px;font-size:.83rem;">
-    <div style="font-weight:700;color:#C01820;margin-bottom:2px;">要選択のみ</div>
-    <div style="color:#6B6A66;font-size:.78rem;">未確認の行に絞り込み</div>
-  </div>
-  <div style="background:#FFFFFF;border:1px solid #8E1119;border-left:3px solid #8E1119;border-radius:6px;padding:8px 14px;font-size:.83rem;">
-    <div style="font-weight:700;color:#8E1119;margin-bottom:2px;">確定のみ</div>
-    <div style="color:#6B6A66;font-size:.78rem;">確定済みの行を確認</div>
-  </div>
-  <div style="background:#F1EFE8;border:1px solid #9A9893;border-radius:6px;padding:8px 14px;font-size:.83rem;">
-    <div style="font-weight:700;color:#9A9893;margin-bottom:2px;">未マッチのみ</div>
-    <div style="color:#6B6A66;font-size:.78rem;">基準なしの行を確認</div>
-  </div>
-</div>
-""", unsafe_allow_html=True)
+| フィルタ | 表示内容 |
+|---|---|
+| すべて | 全行を表示 |
+| 要選択のみ | 未確認の行に絞り込み |
+| 確定のみ | 確定済みの行を確認 |
+| 未マッチのみ | 基準なしの行を確認 |
+""")
         st.markdown("ページ下部の「④ 出力へ →」ボタンはいつでも押せます。")
 
     # ── ④ 出力 ───────────────────────────────────────────────
