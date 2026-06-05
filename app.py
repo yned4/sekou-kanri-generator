@@ -1200,50 +1200,74 @@ def _render_help():
 
     # ── ② 構造化 ─────────────────────────────────────────────
     with tab2:
+        st.markdown("### ② 構造化 — 抽出結果の確認")
+        st.markdown("#### 画面の見方")
+        st.markdown("抽出された工種・種別・細別の階層が一覧表示されます。各行には国交省基準DBとの照合結果（マッチ状態）が背景色で示されます。")
         st.markdown("""
-### ② 構造化 — 抽出結果の確認
-
-#### 画面の見方
-
-抽出された工種・種別・細別の階層が一覧表示されます。
-各行には国交省基準DBとの照合結果（マッチ状態）が色で示されます。
-
-| 色 | 状態 | 意味 |
-|---|---|---|
-| 白（えんじ左線） | 確定 | 基準と1対1で照合済み |
-| 淡えんじ | 要選択 | 複数候補あり・工法の選択が必要 |
-| 淡グレー | 未マッチ | 対応する基準が見つからない |
-
+<div style="border:1px solid #E5E3DC;border-radius:8px;overflow:hidden;margin:10px 0 18px;">
+  <div style="background:#FFFFFF;border-left:4px solid #8E1119;padding:10px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #E5E3DC;">
+    <span style="width:10px;height:10px;border-radius:50%;background:#8E1119;flex-shrink:0;display:inline-block;"></span>
+    <span style="font-weight:700;color:#8E1119;min-width:60px;">確定</span>
+    <span style="color:#6B6A66;font-size:.88rem;">基準と照合済み。このまま出力できます。</span>
+  </div>
+  <div style="background:#FBEBEC;border-left:4px solid #C01820;padding:10px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #E5E3DC;">
+    <span style="width:10px;height:10px;border-radius:50%;background:#C01820;flex-shrink:0;display:inline-block;"></span>
+    <span style="font-weight:700;color:#C01820;min-width:60px;">要選択</span>
+    <span style="color:#6B6A66;font-size:.88rem;">複数候補あり。③マッチングで工法を選択してください。</span>
+  </div>
+  <div style="background:#F1EFE8;border-left:4px solid #9A9893;padding:10px 16px;display:flex;align-items:center;gap:12px;">
+    <span style="width:10px;height:10px;border-radius:50%;background:#9A9893;flex-shrink:0;display:inline-block;"></span>
+    <span style="font-weight:700;color:#9A9893;min-width:60px;">未マッチ</span>
+    <span style="color:#6B6A66;font-size:.88rem;">対応する基準が見つかりません。工種名の表記を確認してください。</span>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+        st.markdown("""
 #### 確認ポイント
 
-- **未マッチ行が多い場合**: 工種名の表記が基準DBと異なる可能性があります
-  「基準DB確認」ページで工種名を検索して確認してください
+- **未マッチ行が多い場合**: 工種名の表記が基準DBと異なる可能性があります。「基準DB確認」ページで工種名を検索して確認してください
 - **階層が崩れている場合**: PDFの表レイアウトが非標準の可能性があります
 
 #### 除外される行について
 
 数量総括表には施工管理基準と照合すべき工種以外に、費用の集計行やヘッダー行が含まれます。
 これらは自動的に除外され、照合対象から外されます。
-
-| 除外理由 | 判定条件 | 例 |
-|---|---|---|
-| **費用集計項目** | 登録済みの集計行名称と一致 | 直接工事費・共通仮設費・現場管理費・工事価格・消費税相当額 など |
-| **小計・合計行** | 行の先頭が `(` または `（` で始まる | （計）・（小計） など |
-| **ヘッダー行** | 「工事区分」または「工事名」を含む | テーブルの見出し行 |
-
+""")
+        st.markdown("""
+<div style="border:1px solid #E5E3DC;border-radius:8px;overflow:hidden;margin:6px 0 12px;">
+  <div style="background:#F4F2EE;padding:8px 16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:.78rem;font-weight:700;color:#6B6A66;border-bottom:1px solid #E5E3DC;">
+    <span>除外理由</span><span>判定条件</span><span>例</span>
+  </div>
+  <div style="padding:10px 16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:.83rem;border-bottom:1px solid #E5E3DC;align-items:start;">
+    <span style="font-weight:700;color:#2C2C2A;">費用集計項目</span>
+    <span style="color:#6B6A66;">登録済みの集計行名称と一致</span>
+    <span style="color:#6B6A66;">直接工事費・共通仮設費・現場管理費・工事原価 など</span>
+  </div>
+  <div style="padding:10px 16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:.83rem;border-bottom:1px solid #E5E3DC;align-items:start;">
+    <span style="font-weight:700;color:#2C2C2A;">小計・合計行</span>
+    <span style="color:#6B6A66;">行の先頭が <code style="background:#F4F2EE;padding:1px 4px;border-radius:3px;">(</code> または <code style="background:#F4F2EE;padding:1px 4px;border-radius:3px;">（</code> で始まる</span>
+    <span style="color:#6B6A66;">（計）・（小計） など</span>
+  </div>
+  <div style="padding:10px 16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:.83rem;align-items:start;">
+    <span style="font-weight:700;color:#2C2C2A;">ヘッダー行</span>
+    <span style="color:#6B6A66;">「工事区分」または「工事名」を含む</span>
+    <span style="color:#6B6A66;">テーブルの見出し行</span>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+        st.markdown("""
 除外された行は「除外された行を確認する」セクションで一覧表示されます。
 本来照合すべき工種が除外されている場合は管理者にご連絡ください。
 
 #### 次のステップ
 
-内容を確認したら「③ マッチングを確認する →」ボタンで進みます。
+内容を確認したら「③ マッチングを確認する →」ボタン、またはサイドバーの「③ マッチング」で進みます。
 """)
 
     # ── ③ マッチング ─────────────────────────────────────────
     with tab3:
+        st.markdown("### ③ マッチング — 候補の確認と選択")
         st.markdown("""
-### ③ マッチング — 候補の確認と選択
-
 #### 画面の構成
 
 **上部**: 確定 / 要選択 / 未マッチの件数カード
@@ -1256,53 +1280,100 @@ def _render_help():
 
 ---
 
+#### 一覧表の色の見方
+""")
+        st.markdown("""
+<div style="border:1px solid #E5E3DC;border-radius:8px;overflow:hidden;margin:4px 0 18px;">
+  <div style="background:#F4F2EE;padding:7px 14px;display:grid;grid-template-columns:120px 1fr;font-size:.77rem;font-weight:700;color:#6B6A66;border-bottom:1px solid #E5E3DC;gap:12px;">
+    <span>状態</span><span>操作</span>
+  </div>
+  <div style="background:#FFFFFF;border-left:4px solid #8E1119;padding:10px 14px;display:grid;grid-template-columns:120px 1fr;gap:12px;border-bottom:1px solid #E5E3DC;align-items:center;">
+    <span style="font-weight:700;color:#8E1119;">● 確定</span>
+    <span style="color:#6B6A66;font-size:.85rem;">照合済み。そのまま出力できます。行をクリックすると内容を確認でき、「確定を取り消す」で要選択に戻せます。</span>
+  </div>
+  <div style="background:#FBEBEC;border-left:4px solid #C01820;padding:10px 14px;display:grid;grid-template-columns:120px 1fr;gap:12px;border-bottom:1px solid #E5E3DC;align-items:center;">
+    <span style="font-weight:700;color:#C01820;">● 要選択</span>
+    <span style="color:#6B6A66;font-size:.85rem;">行をクリックして候補カードを開き、採用する工法を選んで「確定して次へ」を押してください。</span>
+  </div>
+  <div style="background:#F1EFE8;border-left:4px solid #9A9893;padding:10px 14px;display:grid;grid-template-columns:120px 1fr;gap:12px;align-items:center;">
+    <span style="font-weight:700;color:#9A9893;">● 未マッチ</span>
+    <span style="color:#6B6A66;font-size:.85rem;">DBに対応する基準がありません。出力には含まれません。</span>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+        st.markdown("""
 #### 要選択行の処理手順
-
-「要選択」行は工法によって適用する基準が異なるため、どの基準を使うか選択が必要です。
 
 1. 進捗バナーの「未確認へ →」ボタン、またはフィルタで「要選択のみ」を表示
 2. 一覧の行をクリックして候補パネルを開く
 3. **比較カード**を見て、適用する候補に「採用」チェックを入れる
-   - 差分がある項目は強調表示されます（例: 規格値・測定頻度の違い）
 4. 「確定して次へ →」ボタンで確定し、次の要選択行へ進む
 5. 要選択がすべて確定されると、上部に「④ 出力へ →」ボタンが表示されます
 
-#### 一括確定
+「すべて確定」を押すと全行を一括確定できます（各行のデフォルト候補が採用されます）。
 
-「すべて確定」ボタンを押すと、要選択の全行をまとめて確定できます（各行のデフォルト候補が採用されます）。
-
-#### 確定の取り消し
-
-確定済みの行を一覧でクリックすると、フィルタ横に**「確定を取り消す」**ボタンが表示されます。
-クリックすると「要選択」状態に戻り、候補を選び直せます。
+---
 
 #### 比較カードの読み方
 
-```
-候補A: ○○工（機械掘削）     候補B: ○○工（人力掘削）
-測定項目: 幅・深さ            測定項目: 幅・深さ
-規格値: ±50mm               規格値: ±30mm   ← 差分
-測定頻度: 200m毎             測定頻度: 100m毎 ← 差分
-```
+複数の工法候補がある場合、下のようなカードが横に並びます。差分のある項目は赤チップで強調されます。
+""")
+        st.markdown("""
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:6px 0 18px;">
+  <div style="background:#FBEBEC;border:1.5px solid #C01820;border-radius:6px;padding:14px;">
+    <div style="font-size:.85rem;font-weight:700;color:#2C2C2A;margin-bottom:8px;">候補A：○○工（機械掘削）　✓ 採用中</div>
+    <div style="font-size:.80rem;color:#6B6A66;line-height:2.0;">
+      <div>測定項目：幅・深さ・法長</div>
+      <div>規格値：<span style="display:inline-block;background:#FBEBEC;color:#8E1119;border-radius:3px;padding:0 6px;font-size:.75rem;font-weight:600;">±50mm</span></div>
+      <div>測定頻度：<span style="display:inline-block;background:#FBEBEC;color:#8E1119;border-radius:3px;padding:0 6px;font-size:.75rem;font-weight:600;">200m毎</span></div>
+    </div>
+  </div>
+  <div style="background:#FFF;border:1px solid #E5E3DC;border-radius:6px;padding:14px;">
+    <div style="font-size:.85rem;font-weight:700;color:#2C2C2A;margin-bottom:8px;">候補B：○○工（人力掘削）</div>
+    <div style="font-size:.80rem;color:#6B6A66;line-height:2.0;">
+      <div>測定項目：幅・深さ・法長</div>
+      <div>規格値：<span style="display:inline-block;background:#FBEBEC;color:#8E1119;border-radius:3px;padding:0 6px;font-size:.75rem;font-weight:600;">±30mm</span></div>
+      <div>測定頻度：<span style="display:inline-block;background:#FBEBEC;color:#8E1119;border-radius:3px;padding:0 6px;font-size:.75rem;font-weight:600;">100m毎</span></div>
+    </div>
+  </div>
+</div>
+<p style="font-size:.80rem;color:#6B6A66;margin-top:-8px;">赤チップの項目が候補間で異なる差分です。工法に合った候補を選択してください。</p>
+""", unsafe_allow_html=True)
+        st.markdown("""
+#### 確定の取り消し
 
-差分のある項目は赤背景のチップで強調表示されます。
+確定済みの行を一覧でクリックすると、フィルタ横に **「確定を取り消す」** ボタンが表示されます。
+クリックすると「要選択」状態に戻り、候補を選び直せます。
 
 #### 品質管理・撮影箇所の調整
 
-候補パネル下部の「品質管理・撮影箇所の候補を調整」を開くと、
-品質管理と撮影箇所の対応も個別に選択できます。
+候補パネル下部の「品質管理・撮影箇所の候補を調整」を開くと、品質管理と撮影箇所の対応も個別に選択できます。
+
+---
 
 #### フィルタの使い方
-
-| フィルタ | 表示内容 |
-|---|---|
-| すべて | 全行を表示 |
-| 要選択のみ | 未確認の行に絞り込み |
-| 確定のみ | 確定済みの行を確認 |
-| 未マッチのみ | 基準なしの行を確認 |
-
-ページ下部の「④ 出力へ →」ボタンはいつでも押せます。
 """)
+        st.markdown("""
+<div style="display:flex;gap:8px;margin:6px 0 16px;flex-wrap:wrap;">
+  <div style="background:#FFF;border:1px solid #E5E3DC;border-radius:6px;padding:8px 14px;font-size:.83rem;">
+    <div style="font-weight:700;color:#2C2C2A;margin-bottom:2px;">すべて</div>
+    <div style="color:#6B6A66;font-size:.78rem;">全行を表示</div>
+  </div>
+  <div style="background:#FBEBEC;border:1px solid #C01820;border-radius:6px;padding:8px 14px;font-size:.83rem;">
+    <div style="font-weight:700;color:#C01820;margin-bottom:2px;">要選択のみ</div>
+    <div style="color:#6B6A66;font-size:.78rem;">未確認の行に絞り込み</div>
+  </div>
+  <div style="background:#FFFFFF;border:1px solid #8E1119;border-left:3px solid #8E1119;border-radius:6px;padding:8px 14px;font-size:.83rem;">
+    <div style="font-weight:700;color:#8E1119;margin-bottom:2px;">確定のみ</div>
+    <div style="color:#6B6A66;font-size:.78rem;">確定済みの行を確認</div>
+  </div>
+  <div style="background:#F1EFE8;border:1px solid #9A9893;border-radius:6px;padding:8px 14px;font-size:.83rem;">
+    <div style="font-weight:700;color:#9A9893;margin-bottom:2px;">未マッチのみ</div>
+    <div style="color:#6B6A66;font-size:.78rem;">基準なしの行を確認</div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+        st.markdown("ページ下部の「④ 出力へ →」ボタンはいつでも押せます。")
 
     # ── ④ 出力 ───────────────────────────────────────────────
     with tab4:
