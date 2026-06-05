@@ -415,66 +415,6 @@ with st.sidebar:
 
     st.divider()
 
-    # ─ 出力セクション ────────────────────────────────────────
-    if has_data:
-        df_tmp = _get_df_raw()
-        out_d_l, out_h_l, out_p_l = _collect_labels(df_tmp)
-
-        st.markdown("### 出力")
-        st.markdown(
-            f'<div class="out-summary">'
-            f'<table>'
-            f'<tr><td>出来形管理</td><td class="n">{len(out_d_l)}</td></tr>'
-            f'<tr><td>品質管理</td>  <td class="n">{len(out_h_l)}</td></tr>'
-            f'<tr><td>撮影箇所</td>  <td class="n">{len(out_p_l)}</td></tr>'
-            f'</table>'
-            f'<div class="note">未確認の要選択は全候補を自動採用</div>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-        can_out = bool(out_d_l or out_h_l or out_p_l)
-        if st.button("施工管理計画を出力", type="primary",
-                     use_container_width=True, disabled=not can_out, key="btn_out"):
-            try:
-                si = st.session_state.suryo_info
-                with st.spinner("Excel生成中..."):
-                    filtered = filter_by_row_labels(kojyo_data, out_d_l, out_h_l, out_p_l)
-
-                    # 出来形「工種」列 = 数量総括表の工種（最上位）を直接構築
-                    # df_match の各行: 工種（数量総括表の最上位）と 出来形マッチ（国交省DB工種）を対応付け
-                    df_raw_out = _get_df_raw()
-                    dmap = {}
-                    for _, row in df_raw_out[df_raw_out["状態"].isin(["確定", "要選択"])].iterrows():
-                        ckey = _chain_key(row)
-                        suryo_kojyo = str(row.get("工種", "")).strip()  # 数量総括表の工種（最上位）
-                        saved = st.session_state.row_selections.get(ckey)
-                        all_d = [x.strip() for x in str(row.get("出来形マッチ", "")).split("\n") if x.strip()]
-                        selected_d = saved["出来形"] if saved else all_d
-                        for label in selected_d:
-                            db_kojyo = label.split(" / ")[0].strip()
-                            if db_kojyo and db_kojyo not in dmap:
-                                dmap[db_kojyo] = suryo_kojyo
-
-                    excel_bytes = write_excel(filtered, 工事名=si["工事名"], dekigata_kojyo_map=dmap)
-                safe = re.sub(r'[\\/:*?"<>|　 ]','_',si["工事名"])
-                st.session_state.excel_cache = excel_bytes
-                st.session_state.excel_fname = (f"施工管理計画_{safe}.xlsx" if safe
-                                                else "施工管理計画.xlsx")
-                st.rerun()
-            except Exception:
-                st.error("生成エラー")
-                with st.expander("詳細"): st.code(traceback.format_exc())
-
-        if st.session_state.excel_cache:
-            st.download_button(
-                "⬇  ダウンロード",
-                data=st.session_state.excel_cache,
-                file_name=st.session_state.excel_fname,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-            )
-        st.divider()
-
     # ─ DB情報 ────────────────────────────────────────────────
     st.markdown("### 国交省基準 DB")
     st.caption(f"Ver. {version_info.get('バージョン','不明')}  "
@@ -710,7 +650,12 @@ def _render_matching():
         unsafe_allow_html=True,
     )
 
-    # ── 候補選択パネル（テーブル直下） ──────────────────────
+    # ── 出力セクション（テーブル直下・常に表示） ─────────────
+    _render_output_section()
+
+    st.markdown("---")
+
+    # ── 候補選択パネル ──────────────────────────────────────
     if not has_sel:
         st.markdown(
             '<div style="margin-top:10px;padding:18px;background:#FFF;'
@@ -839,6 +784,74 @@ def _render_matching():
             r = dr.iloc[0]
             bc = " › ".join(x for x in [r.get("編",""),r.get("章",""),r.get("節",""),fd] if x)
             st.caption(f"DB 目次：{bc}")
+
+
+def _render_output_section():
+    """施工管理計画の出力ボタン・ダウンロードボタンを描画する。"""
+    if st.session_state.df_match is None:
+        return
+
+    st.divider()
+    df_tmp = _get_df_raw()
+    out_d_l, out_h_l, out_p_l = _collect_labels(df_tmp)
+    can_out = bool(out_d_l or out_h_l or out_p_l)
+
+    st.markdown(
+        f'<div style="background:#F8FAFC;border:1px solid #E2E6EA;border-radius:8px;'
+        f'padding:16px 20px;margin-top:8px;">'
+        f'<div style="font-size:.85rem;font-weight:700;color:#1A2332;margin-bottom:10px;">'
+        f'出力内容</div>'
+        f'<div style="font-size:.82rem;color:#555;line-height:2.0;">'
+        f'出来形管理：<b>{len(out_d_l)}</b> 件　'
+        f'品質管理：<b>{len(out_h_l)}</b> 件　'
+        f'撮影箇所：<b>{len(out_p_l)}</b> 件'
+        f'</div>'
+        f'<div style="font-size:.72rem;color:#AAA;margin-top:4px;">'
+        f'未確認の要選択は全候補を自動採用</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    col_out, col_dl = st.columns([2, 1])
+    with col_out:
+        if st.button("施工管理計画を出力", type="primary",
+                     use_container_width=True, disabled=not can_out, key="btn_out"):
+            try:
+                si = st.session_state.suryo_info
+                with st.spinner("Excel生成中..."):
+                    filtered = filter_by_row_labels(kojyo_data, out_d_l, out_h_l, out_p_l)
+                    df_raw_out = _get_df_raw()
+                    dmap = {}
+                    for _, row in df_raw_out[df_raw_out["状態"].isin(["確定", "要選択"])].iterrows():
+                        ckey = _chain_key(row)
+                        suryo_kojyo = str(row.get("工種", "")).strip()
+                        saved = st.session_state.row_selections.get(ckey)
+                        all_d = [x.strip() for x in str(row.get("出来形マッチ", "")).split("\n") if x.strip()]
+                        selected_d = saved["出来形"] if saved else all_d
+                        for label in selected_d:
+                            db_kojyo = label.split(" / ")[0].strip()
+                            if db_kojyo and db_kojyo not in dmap:
+                                dmap[db_kojyo] = suryo_kojyo
+                    excel_bytes = write_excel(filtered, 工事名=si["工事名"], dekigata_kojyo_map=dmap)
+                safe = re.sub(r'[\\/:*?"<>|　 ]', '_', si["工事名"])
+                st.session_state.excel_cache = excel_bytes
+                st.session_state.excel_fname = (f"施工管理計画_{safe}.xlsx" if safe
+                                                else "施工管理計画.xlsx")
+                st.rerun()
+            except Exception:
+                st.error("生成エラー")
+                with st.expander("詳細"): st.code(traceback.format_exc())
+
+    with col_dl:
+        if st.session_state.excel_cache:
+            st.download_button(
+                "⬇  ダウンロード",
+                data=st.session_state.excel_cache,
+                file_name=st.session_state.excel_fname,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+            )
+
 
 # ===========================================================================
 # 基準DB確認
