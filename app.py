@@ -726,7 +726,13 @@ def _render_matching():
                     st.toast("要選択をすべて確定しました")
                     st.rerun()
         else:
-            st.success(f"要選択 {n_yo} 件すべて確認済みです。④ 出力へ進んでください。")
+            ok_col, go_col = st.columns([4, 1])
+            with ok_col:
+                st.success(f"要選択 {n_yo} 件すべて確認済みです。")
+            with go_col:
+                if st.button("④ 出力へ →", type="primary",
+                             use_container_width=True, key="match_to_output"):
+                    st.session_state.page = "output"; st.rerun()
 
     # フィルタ
     filter_opt = st.radio(
