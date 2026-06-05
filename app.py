@@ -745,10 +745,24 @@ def _render_matching():
                     st.session_state.page = "output"; st.rerun()
 
     # フィルタ
-    filter_opt = st.radio(
-        "filter", ["すべて","要選択のみ","確定のみ","未マッチのみ"],
-        horizontal=True, label_visibility="collapsed",
-    )
+    sel_idx = st.session_state.selected_idx
+    has_sel = sel_idx is not None and 0 <= sel_idx < len(df_raw)
+    sel_ckey = _chain_key(df_raw.iloc[sel_idx]) if has_sel else None
+    is_sel_confirmed = sel_ckey is not None and sel_ckey in st.session_state.confirmed_keys
+
+    radio_col, undo_col = st.columns([4, 1])
+    with radio_col:
+        filter_opt = st.radio(
+            "filter", ["すべて","要選択のみ","確定のみ","未マッチのみ"],
+            horizontal=True, label_visibility="collapsed",
+        )
+    with undo_col:
+        if is_sel_confirmed:
+            if st.button("確定を取り消す", use_container_width=True, key="unconfirm_top"):
+                st.session_state.confirmed_keys.discard(sel_ckey)
+                st.toast(f"「{df_raw.iloc[sel_idx]['_name']}」の確定を解除しました")
+                st.rerun()
+
     FM = {"確定のみ":"確定","要選択のみ":"要選択","未マッチのみ":"未マッチ"}
     df_v = (df_raw[df_raw["状態"]==FM[filter_opt]].copy()
             if filter_opt in FM else df_raw.copy())
@@ -762,8 +776,6 @@ def _render_matching():
         cats = (["出来形"] if d else [])+(["品質"] if h else [])+(["撮影"] if p else [])
         return f"候補{len(dl)}件（工法で分岐）" if len(dl)>=2 else "・".join(cats)
 
-    sel_idx = st.session_state.selected_idx
-    has_sel = sel_idx is not None and 0 <= sel_idx < len(df_raw)
     tbl_h   = 280 if has_sel else 430
 
     sts_idx = {i: row["状態"] for i,(_,row) in enumerate(df_v.iterrows())}
@@ -936,9 +948,8 @@ def _render_matching():
             }
 
             # ── 確定して次へ ──────────────────────────────────────
-            is_confirmed = ckey in st.session_state.confirmed_keys
             if cur_pos is not None:
-                btn_col, undo_col, _ = st.columns([2, 2, 3])
+                btn_col, _ = st.columns([2, 5])
                 with btn_col:
                     if cur_pos < len(yo_idxs) - 1:
                         if st.button("確定して次へ →", type="primary",
@@ -953,19 +964,6 @@ def _render_matching():
                             st.session_state.confirmed_keys.add(ckey)
                             st.toast("すべての要選択を確認しました。④出力へ進んでください。")
                             st.rerun()
-                with undo_col:
-                    if is_confirmed:
-                        if st.button("確定を取り消す", use_container_width=True, key="unconfirm_btn"):
-                            st.session_state.confirmed_keys.discard(ckey)
-                            st.toast(f"「{sel['_name']}」の確定を解除しました")
-                            st.rerun()
-            elif is_confirmed:
-                undo_col2, _ = st.columns([2, 5])
-                with undo_col2:
-                    if st.button("確定を取り消す", use_container_width=True, key="unconfirm_btn2"):
-                        st.session_state.confirmed_keys.discard(ckey)
-                        st.toast(f"「{sel['_name']}」の確定を解除しました")
-                        st.rerun()
 
             if items_d:
                 fd = items_d[0].split(" / ")[0]
