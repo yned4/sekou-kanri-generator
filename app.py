@@ -329,10 +329,11 @@ unique_kojyo = get_unique_kojyo(kojyo_data)
 # ===========================================================================
 for _k in ["suryo_info","df_match","selected_idx","excluded_rows"]:
     if _k not in st.session_state: st.session_state[_k] = None
-if "row_selections" not in st.session_state: st.session_state["row_selections"] = {}
-if "page"           not in st.session_state: st.session_state["page"]           = "upload"
-if "excel_cache"    not in st.session_state: st.session_state["excel_cache"]    = None
-if "excel_fname"    not in st.session_state: st.session_state["excel_fname"]    = None
+if "row_selections"  not in st.session_state: st.session_state["row_selections"]  = {}
+if "confirmed_keys"  not in st.session_state: st.session_state["confirmed_keys"]  = set()
+if "page"            not in st.session_state: st.session_state["page"]            = "upload"
+if "excel_cache"     not in st.session_state: st.session_state["excel_cache"]     = None
+if "excel_fname"     not in st.session_state: st.session_state["excel_fname"]     = None
 
 # ===========================================================================
 # ヘルパー
@@ -369,7 +370,7 @@ def _calc_status(row):
            bool(str(row.get("品質管理マッチ","")).strip()) or
            bool(str(row.get("撮影箇所マッチ","")).strip()))
     if not has: return "未マッチ"
-    if _chain_key(row) in st.session_state.row_selections: return "確定"
+    if _chain_key(row) in st.session_state.confirmed_keys: return "確定"
     return "要選択"
 
 STATUS_BG = {"確定":"#FFFFFF","要選択":"#FBEBEC","未マッチ":"#F1EFE8"}
@@ -475,7 +476,8 @@ with st.sidebar:
             if k != "page": del st.session_state[k]
         st.session_state.suryo_info = st.session_state.df_match = \
             st.session_state.selected_idx = None
-        st.session_state.row_selections = {}
+        st.session_state.row_selections  = {}
+        st.session_state.confirmed_keys  = set()
         st.session_state.excel_cache = st.session_state.excel_fname = None
         st.session_state.page = "upload"
         st.rerun()
@@ -501,6 +503,7 @@ def _render_upload():
             st.session_state.df_match    = None
             st.session_state.selected_idx = None
             st.session_state.row_selections = {}
+            st.session_state.confirmed_keys = set()
             st.session_state.excel_cache = None
             st.rerun()
         # 下部ナビ
@@ -536,6 +539,7 @@ def _render_upload():
                     st.session_state.excluded_rows  = si.get("除外行", None)
                     st.session_state.selected_idx   = None
                     st.session_state.row_selections = {}
+                    st.session_state.confirmed_keys = set()
                     st.session_state.excel_cache    = None
                     st.session_state.excel_fname    = None
                     st.session_state.page           = "structure"
@@ -579,7 +583,7 @@ def _render_structure():
 
     st.dataframe(
         df_disp.style.apply(_rs(sts_idx),axis=1),
-        use_container_width=True, height=520, hide_index=True,
+        use_container_width=True, height=380, hide_index=True,
         column_config={
             "工種・種別・細別": st.column_config.TextColumn(width="large"),
             "マッチ状態":       st.column_config.TextColumn(width="small"),
@@ -644,7 +648,7 @@ def _render_matching():
     # 要対応キュー情報（ページ全体で使用）
     yo_idxs = [i for i,(_,r) in enumerate(df_raw.iterrows()) if r["状態"]=="要選択"]
     confirmed_yo = sum(1 for i in yo_idxs
-                       if _chain_key(df_raw.iloc[i]) in st.session_state.row_selections)
+                       if _chain_key(df_raw.iloc[i]) in st.session_state.confirmed_keys)
     remaining = n_yo - confirmed_yo
 
     st.markdown(
@@ -673,10 +677,10 @@ def _render_matching():
         if remaining > 0:
             first_unc = next(
                 (i for i in yo_idxs
-                 if _chain_key(df_raw.iloc[i]) not in st.session_state.row_selections),
+                 if _chain_key(df_raw.iloc[i]) not in st.session_state.confirmed_keys),
                 None,
             )
-            pcol, jcol = st.columns([4, 1])
+            pcol, jcol, acol = st.columns([4, 1, 1])
             with pcol:
                 st.progress(
                     confirmed_yo / n_yo,
@@ -687,6 +691,19 @@ def _render_matching():
                     if st.button("未確認へ →", use_container_width=True, key="jump_unc"):
                         st.session_state.selected_idx = first_unc
                         st.rerun()
+            with acol:
+                if st.button("すべて確定", use_container_width=True, key="confirm_all_btn"):
+                    for i in yo_idxs:
+                        row = df_raw.iloc[i]
+                        k = _chain_key(row)
+                        st.session_state.confirmed_keys.add(k)
+                        if k not in st.session_state.row_selections:
+                            all_d = [x.strip() for x in str(row.get("出来形マッチ","")).split("\n") if x.strip()]
+                            all_h = [x.strip() for x in str(row.get("品質管理マッチ","")).split("\n") if x.strip()]
+                            all_p = [x.strip() for x in str(row.get("撮影箇所マッチ","")).split("\n") if x.strip()]
+                            st.session_state.row_selections[k] = {"出来形": all_d, "品質管理": all_h, "撮影箇所": all_p}
+                    st.toast("要選択をすべて確定しました")
+                    st.rerun()
         else:
             st.success(f"要選択 {n_yo} 件すべて確認済みです。④ 出力へ進んでください。")
 
@@ -710,7 +727,7 @@ def _render_matching():
 
     sel_idx = st.session_state.selected_idx
     has_sel = sel_idx is not None and 0 <= sel_idx < len(df_raw)
-    tbl_h   = 200 if has_sel else 400
+    tbl_h   = 280 if has_sel else 430
 
     sts_idx = {i: row["状態"] for i,(_,row) in enumerate(df_v.iterrows())}
     df_tbl = pd.DataFrame({
@@ -795,7 +812,7 @@ def _render_matching():
     # 進捗＋ナビ（要選択行のみ）
     if cur_pos is not None and yo_idxs:
         done  = sum(1 for i in yo_idxs
-                    if _chain_key(df_raw.iloc[i]) in st.session_state.row_selections)
+                    if _chain_key(df_raw.iloc[i]) in st.session_state.confirmed_keys)
         total = len(yo_idxs)
         prog_col, nav_col = st.columns([5, 1])
         with prog_col:
@@ -896,20 +913,37 @@ def _render_matching():
     }
 
     # ── 確定して次へ ──────────────────────────────────────
+    is_confirmed = ckey in st.session_state.confirmed_keys
     if cur_pos is not None:
-        btn_col, _ = st.columns([2, 5])
+        btn_col, undo_col, _ = st.columns([2, 2, 3])
         with btn_col:
             if cur_pos < len(yo_idxs) - 1:
                 if st.button("確定して次へ →", type="primary",
                              use_container_width=True, key="confirm_next_btn"):
+                    st.session_state.confirmed_keys.add(ckey)
                     st.toast(f"「{sel['_name']}」を確定しました")
                     st.session_state.selected_idx = yo_idxs[cur_pos + 1]
                     st.rerun()
             else:
                 if st.button("確定（最終項目）✓", type="primary",
                              use_container_width=True, key="confirm_last_btn"):
+                    st.session_state.confirmed_keys.add(ckey)
                     st.toast("すべての要選択を確認しました。④出力へ進んでください。")
                     st.rerun()
+        with undo_col:
+            if is_confirmed:
+                if st.button("確定を取り消す", use_container_width=True, key="unconfirm_btn"):
+                    st.session_state.confirmed_keys.discard(ckey)
+                    st.toast(f"「{sel['_name']}」の確定を解除しました")
+                    st.rerun()
+    elif is_confirmed:
+        # 要選択でない確定行も取り消し可能に
+        undo_col2, _ = st.columns([2, 5])
+        with undo_col2:
+            if st.button("確定を取り消す", use_container_width=True, key="unconfirm_btn2"):
+                st.session_state.confirmed_keys.discard(ckey)
+                st.toast(f"「{sel['_name']}」の確定を解除しました")
+                st.rerun()
 
     if items_d:
         fd = items_d[0].split(" / ")[0]
