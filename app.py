@@ -17,7 +17,6 @@ from extractor import (
     get_unique_kojyo,
     build_match_detail,
     filter_by_row_labels,
-    build_suryo_match_map,
     SURYO_LEVEL_COLS,
 )
 from excel_writer import write_excel, SHEET_HINSHITSU, SHEET_DEKIGATA, SHEET_PHOTO
@@ -440,10 +439,22 @@ with st.sidebar:
                 si = st.session_state.suryo_info
                 with st.spinner("Excel生成中..."):
                     filtered = filter_by_row_labels(kojyo_data, out_d_l, out_h_l, out_p_l)
-                    dmap = build_suryo_match_map(
-                        si["工種リスト"],
-                        list({l.split(" / ")[0].strip() for l in out_d_l})
-                    )
+
+                    # 出来形「工種」列 = 数量総括表の工種（最上位）を直接構築
+                    # df_match の各行: 工種（数量総括表の最上位）と 出来形マッチ（国交省DB工種）を対応付け
+                    df_raw_out = _get_df_raw()
+                    dmap = {}
+                    for _, row in df_raw_out[df_raw_out["状態"].isin(["確定", "要選択"])].iterrows():
+                        ckey = _chain_key(row)
+                        suryo_kojyo = str(row.get("工種", "")).strip()  # 数量総括表の工種（最上位）
+                        saved = st.session_state.row_selections.get(ckey)
+                        all_d = [x.strip() for x in str(row.get("出来形マッチ", "")).split("\n") if x.strip()]
+                        selected_d = saved["出来形"] if saved else all_d
+                        for label in selected_d:
+                            db_kojyo = label.split(" / ")[0].strip()
+                            if db_kojyo and db_kojyo not in dmap:
+                                dmap[db_kojyo] = suryo_kojyo
+
                     excel_bytes = write_excel(filtered, 工事名=si["工事名"], dekigata_kojyo_map=dmap)
                 safe = re.sub(r'[\\/:*?"<>|　 ]','_',si["工事名"])
                 st.session_state.excel_cache = excel_bytes
