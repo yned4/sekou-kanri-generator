@@ -219,8 +219,70 @@ hr{border-color:#E5E3DC!important;}
     display:flex; align-items:center; justify-content:space-between;
     padding:8px 0; margin-bottom:10px; font-size:.82rem; color:#6B6A66;
 }
+
+/* ── ステップ進捗バー ────────────────────────────────────── */
+.step-bar{
+    display:flex; align-items:flex-start;
+    background:#FFF; border:1px solid #E5E3DC; border-radius:8px;
+    padding:16px 24px; margin-bottom:18px;
+}
+.step-item{display:flex;flex-direction:column;align-items:center;min-width:80px;}
+.step-line{flex:1;height:2px;margin-top:13px;border-radius:1px;}
+.step-line.done{background:#8E1119;}
+.step-line.future{background:#E5E3DC;}
+.step-circle{
+    width:26px;height:26px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    font-size:.75rem;font-weight:700;
+}
+.step-circle.done{background:#8E1119;color:#FFF;}
+.step-circle.active{background:#C01820;color:#FFF;box-shadow:0 0 0 3px #FBEBEC;}
+.step-circle.future{background:#FFF;color:#9A9893;border:2px solid #E5E3DC;}
+.step-label{font-size:.68rem;margin-top:5px;font-weight:600;white-space:nowrap;}
+.step-label.done{color:#8E1119;}
+.step-label.active{color:#C01820;}
+.step-label.future{color:#9A9893;}
+
+/* ── ページ下部ナビ ──────────────────────────────────────── */
+.page-nav{
+    display:flex; justify-content:space-between; align-items:center;
+    margin-top:24px; padding-top:16px; border-top:1px solid #E5E3DC;
+}
 </style>
 """, unsafe_allow_html=True)
+
+# ===========================================================================
+# ステップ進捗バー
+# ===========================================================================
+_STEP_ORDER  = ["upload", "structure", "matching", "output"]
+_STEP_LABELS = ["① 取込", "② 構造化", "③ マッチング", "④ 出力"]
+
+
+def _render_step_bar(current_page: str) -> None:
+    """メインエリア上部のステップ進捗インジケータを描画する。"""
+    cur_i = _STEP_ORDER.index(current_page) if current_page in _STEP_ORDER else 0
+
+    html = '<div class="step-bar">'
+    for i, label in enumerate(_STEP_LABELS):
+        if i < cur_i:
+            state, symbol = "done", "✓"
+        elif i == cur_i:
+            state, symbol = "active", str(i + 1)
+        else:
+            state, symbol = "future", str(i + 1)
+
+        html += (
+            f'<div class="step-item">'
+            f'<div class="step-circle {state}">{symbol}</div>'
+            f'<div class="step-label {state}">{label}</div>'
+            f'</div>'
+        )
+        if i < len(_STEP_LABELS) - 1:
+            line_cls = "done" if i < cur_i else "future"
+            html += f'<div class="step-line {line_cls}"></div>'
+    html += '</div>'
+    st.markdown(html, unsafe_allow_html=True)
+
 
 # ===========================================================================
 # DB 読み込み
@@ -383,34 +445,14 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
-    # ─ ワークフロータブ ──────────────────────────────────────
-    st.markdown("### WORKFLOW")
-
     page      = st.session_state.get("page","upload")
     has_data  = st.session_state.df_match is not None
     has_sel   = (st.session_state.selected_idx is not None
                  and has_data
                  and st.session_state.selected_idx < len(st.session_state.df_match))
 
-    NAV = [
-        ("upload",    "① 取込",      True),
-        ("structure", "② 構造化",    has_data),
-        ("matching",  "③ マッチング", has_data),
-        ("output",    "④ 出力",      has_data),
-    ]
-    for key, label, enabled in NAV:
-        # candidate ページにいるときは matching をアクティブ扱い
-        is_active = (page == key) or (page == "candidate" and key == "matching")
-        btn_type = "primary" if is_active else "secondary"
-        if st.button(label, use_container_width=True,
-                     type=btn_type, disabled=not enabled, key=f"nav_{key}"):
-            st.session_state.page = key
-            st.rerun()
-
-    st.divider()
-
     # ─ その他ナビ ────────────────────────────────────────────
-    if st.button("🗄  基準DB確認", use_container_width=True,
+    if st.button("基準DB確認", use_container_width=True,
                  type="primary" if page=="db_view" else "secondary", key="nav_db"):
         st.session_state.page = "db_view"; st.rerun()
 
@@ -445,6 +487,7 @@ with st.sidebar:
 # ① 取込ページ
 # ===========================================================================
 def _render_upload():
+    _render_step_bar("upload")
     st.markdown(
         '<div class="page-card">'
         '<div class="page-card-title">① 取込 — 数量総括表PDFのアップロード</div>'
@@ -463,8 +506,11 @@ def _render_upload():
             st.session_state.row_selections = {}
             st.session_state.excel_cache = None
             st.rerun()
-        if st.button("→ ② 構造化を確認する", type="primary", key="go_structure"):
+        # 下部ナビ
+        st.markdown('<div class="page-nav"><div></div>', unsafe_allow_html=True)
+        if st.button("② 構造化を確認する →", type="primary", key="go_structure"):
             st.session_state.page = "structure"; st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
         return
 
     uploaded = st.file_uploader("数量総括表PDFをドラッグ＆ドロップ、またはクリックで選択",
@@ -505,6 +551,7 @@ def _render_upload():
 # ===========================================================================
 def _render_structure():
     si = st.session_state.suryo_info
+    _render_step_bar("structure")
     st.markdown(
         f'<div class="page-card">'
         f'<div class="page-card-title">② 構造化 — 抽出結果の確認</div>'
@@ -548,14 +595,23 @@ def _render_structure():
         '</div>',
         unsafe_allow_html=True,
     )
-    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
-    if st.button("→ ③ マッチング結果を確認する", type="primary", key="go_matching"):
-        st.session_state.page = "matching"; st.rerun()
+    # 下部ナビ
+    st.markdown('<div class="page-nav">', unsafe_allow_html=True)
+    nav_l, nav_r = st.columns(2)
+    with nav_l:
+        if st.button("← 取込に戻る", key="struct_back"):
+            st.session_state.page = "upload"; st.rerun()
+    with nav_r:
+        if st.button("③ マッチングを確認する →", type="primary",
+                     use_container_width=True, key="go_matching"):
+            st.session_state.page = "matching"; st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # ===========================================================================
 # ③ マッチング＋候補選択（同一ページ）
 # ===========================================================================
 def _render_matching():
+    _render_step_bar("matching")
     df_raw = _get_df_raw()
     n_kaku = int((df_raw["状態"]=="確定").sum())
     n_yo   = int((df_raw["状態"]=="要選択").sum())
@@ -670,7 +726,7 @@ def _render_matching():
         unsafe_allow_html=True,
     )
 
-    # ── 候補選択パネル ──────────────────────────────────────
+    # 下部ナビ（候補パネルが出ていないときのみ表示）
     if not has_sel:
         st.markdown(
             '<div style="margin-top:10px;padding:18px;background:#FFF;'
@@ -679,6 +735,16 @@ def _render_matching():
             '行をクリックすると候補がここに展開されます</div>',
             unsafe_allow_html=True,
         )
+        st.markdown('<div class="page-nav">', unsafe_allow_html=True)
+        nav_l, nav_r = st.columns(2)
+        with nav_l:
+            if st.button("← 構造化に戻る", key="match_back"):
+                st.session_state.page = "structure"; st.rerun()
+        with nav_r:
+            if st.button("④ 出力へ →", type="primary",
+                         use_container_width=True, key="match_next"):
+                st.session_state.page = "output"; st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
         return
 
     sel  = df_raw.iloc[sel_idx]
@@ -833,6 +899,7 @@ def _render_matching():
 def _render_output():
     """④ 出力ページ。"""
     si = st.session_state.suryo_info
+    _render_step_bar("output")
     st.markdown(
         f'<div class="page-card">'
         f'<div class="page-card-title">④ 出力 — 施工管理計画 Excel 生成</div>'
@@ -930,6 +997,12 @@ def _render_output():
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True,
             )
+
+    # 下部ナビ
+    st.markdown('<div class="page-nav">', unsafe_allow_html=True)
+    if st.button("← マッチングに戻る", key="output_back"):
+        st.session_state.page = "matching"; st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 # ===========================================================================
