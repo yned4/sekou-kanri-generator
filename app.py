@@ -45,7 +45,7 @@ button,input,select,textarea,th,td{
 *{text-shadow:none!important;}
 
 /* ── ページ背景 ───────────────────────────────────────────── */
-.stApp,[data-testid="stAppViewContainer"],.main{background:#F2F4F7!important;}
+.stApp,[data-testid="stAppViewContainer"],.main{background:#F4F2EE!important;}
 [data-testid="stAppViewContainer"]::before,
 [data-testid="stAppViewContainer"]::after,
 [data-testid="stHeader"],[data-testid="stHeader"]::before,
@@ -60,38 +60,38 @@ button,input,select,textarea,th,td{
     max-width:100%!important;
 }
 
-/* ── サイドバー（ダーク紺） ───────────────────────────────── */
+/* ── サイドバー（チャコール） ─────────────────────────────── */
 [data-testid="stSidebar"]{
-    background:#1A2332!important;
-    border-right:1px solid #263447!important;
+    background:#2B2A28!important;
+    border-right:1px solid #3D3C39!important;
     min-width:220px!important; max-width:220px!important;
 }
-[data-testid="stSidebar"] *{color:#B8CCE0!important;}
-[data-testid="stSidebar"] strong,[data-testid="stSidebar"] b{color:#E2EDF8!important;}
+[data-testid="stSidebar"] *{color:#EDEBE6!important;}
+[data-testid="stSidebar"] strong,[data-testid="stSidebar"] b{color:#FFFFFF!important;}
 [data-testid="stSidebar"] h3{
-    color:#4E7FA8!important; font-size:.60rem!important;
+    color:#9A9893!important; font-size:.60rem!important;
     letter-spacing:.22em!important; text-transform:uppercase!important;
     font-weight:700!important; margin:12px 0 4px 16px!important;
 }
-[data-testid="stSidebar"] hr{border-color:#263447!important;}
+[data-testid="stSidebar"] hr{border-color:#3D3C39!important;}
 [data-testid="stSidebar"] code{
-    background:#111C2A!important; color:#7EC8E3!important;
-    border:1px solid #2A4060!important; padding:1px 5px!important;
+    background:#1C1B19!important; color:#EDEBE6!important;
+    border:1px solid #4A4845!important; padding:1px 5px!important;
     border-radius:3px!important; font-size:.78rem!important;
 }
 [data-testid="stSidebar"] [data-testid="stExpander"]{
-    background:#111C2A!important; border:1px solid #263447!important;
+    background:#1C1B19!important; border:1px solid #3D3C39!important;
     border-radius:5px!important;
 }
 [data-testid="stSidebar"] [data-testid="stExpander"] summary{
-    color:#7AAFD4!important; font-size:.83rem!important; font-weight:600!important;
+    color:#EDEBE6!important; font-size:.83rem!important; font-weight:600!important;
 }
 [data-testid="stSidebar"] [data-testid="stExpander"] .stMarkdown p,
 [data-testid="stSidebar"] [data-testid="stExpander"] .stMarkdown li{
-    font-size:.81rem!important; line-height:1.8!important; color:#90B0C8!important;
+    font-size:.81rem!important; line-height:1.8!important; color:#9A9893!important;
 }
 [data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"]{
-    background:#111C2A!important; border:1px dashed #3A5A7A!important;
+    background:#1C1B19!important; border:1px dashed #5A5855!important;
     border-radius:5px!important;
 }
 
@@ -104,16 +104,16 @@ button,input,select,textarea,th,td{
     border-radius:0!important;
     padding:10px 16px!important;
     font-size:.85rem!important; font-weight:500!important;
-    background:transparent!important; color:#90A8C0!important;
+    background:transparent!important; color:#9A9893!important;
     transition:background .12s,color .12s;
 }
 [data-testid="stSidebar"] .stButton>button:hover{
-    background:rgba(100,181,246,.07)!important; color:#B8D4EC!important;
+    background:rgba(192,24,32,.12)!important; color:#EDEBE6!important;
 }
 [data-testid="stSidebar"] .stButton>button[kind="primary"]{
-    background:rgba(21,101,192,.20)!important;
-    border-left:3px solid #1565C0!important;
-    color:#64B5F6!important; font-weight:700!important;
+    background:rgba(192,24,32,.20)!important;
+    border-left:3px solid #C01820!important;
+    color:#FBEBEC!important; font-weight:700!important;
 }
 [data-testid="stSidebar"] .stButton>button:disabled{
     opacity:.35!important; cursor:not-allowed!important;
@@ -121,103 +121,103 @@ button,input,select,textarea,th,td{
 
 /* ── メインエリア ボタン ─────────────────────────────────── */
 .stButton>button[kind="primary"]{
-    background:#1565C0; color:#FFF;
+    background:#C01820; color:#FFF;
     border:none; border-radius:5px; font-weight:600;
 }
-.stButton>button[kind="primary"]:hover{background:#0D47A1;}
+.stButton>button[kind="primary"]:hover{background:#8E1119;}
 .stButton>button[kind="primary"]:disabled{background:#999!important;color:#CCC!important;}
 
 /* ── ダウンロード ─────────────────────────────────────────── */
 [data-testid="stDownloadButton"]>button{
-    background:#FFF!important; color:#1565C0!important;
-    border:1.5px solid #1565C0!important; border-radius:5px!important;
+    background:#FFF!important; color:#C01820!important;
+    border:1.5px solid #C01820!important; border-radius:5px!important;
     font-weight:600!important;
 }
-[data-testid="stDownloadButton"]>button:hover{background:#E3F2FD!important;}
+[data-testid="stDownloadButton"]>button:hover{background:#FBEBEC!important;}
 
 /* ── info ───────────────────────────────────────────────── */
 [data-testid="stInfo"]{
-    background:#E8F0FE; border-left:3px solid #1565C0;
-    border-radius:4px; color:#1A2B3C;
+    background:#FBEBEC; border-left:3px solid #C01820;
+    border-radius:4px; color:#2C2C2A;
 }
 [data-testid="stRadio"] label,[data-testid="stCheckbox"] label{font-size:.84rem;}
-hr{border-color:#E2E6EA!important;}
+hr{border-color:#E5E3DC!important;}
 
 /* ── ページタイトルカード ────────────────────────────────── */
 .page-card{
-    background:#FFF; border:1px solid #E2E6EA; border-radius:8px;
+    background:#FFF; border:1px solid #E5E3DC; border-radius:8px;
     padding:14px 20px; margin-bottom:16px;
     box-shadow:0 1px 4px rgba(0,0,0,.05);
 }
-.page-card-title{font-size:1.0rem;font-weight:800;color:#1A2332;margin-bottom:2px;}
-.page-card-sub{font-size:.74rem;color:#888;}
+.page-card-title{font-size:1.0rem;font-weight:800;color:#2C2C2A;margin-bottom:2px;}
+.page-card-sub{font-size:.74rem;color:#6B6A66;}
 
 /* ── メトリクスカード ────────────────────────────────────── */
 .metrics-row{display:flex;gap:10px;margin-bottom:12px;}
 .m-card{
-    flex:1; background:#FFF; border:1px solid #E2E6EA;
+    flex:1; background:#FFF; border:1px solid #E5E3DC;
     border-radius:7px; padding:10px 16px;
     box-shadow:0 1px 3px rgba(0,0,0,.04);
     display:flex; align-items:center; gap:12px;
 }
 .m-val{font-size:2rem;font-weight:800;line-height:1;}
-.m-lbl{font-size:.70rem;font-weight:600;color:#888;
+.m-lbl{font-size:.70rem;font-weight:600;color:#6B6A66;
         text-transform:uppercase;letter-spacing:.07em;}
-.m-card.kaku{border-left:3px solid #34A853;} .m-card.kaku .m-val{color:#1B6E2A;}
-.m-card.yo  {border-left:3px solid #F59E0B;} .m-card.yo   .m-val{color:#B45309;}
-.m-card.mi  {border-left:3px solid #CCC;}    .m-card.mi   .m-val{color:#9E9E9E;}
+.m-card.kaku{border-left:3px solid #8E1119;} .m-card.kaku .m-val{color:#8E1119;}
+.m-card.yo  {border-left:3px solid #C01820;} .m-card.yo   .m-val{color:#C01820;}
+.m-card.mi  {border-left:3px solid #9A9893;} .m-card.mi   .m-val{color:#9A9893;}
 
 /* ── 候補パネル ──────────────────────────────────────────── */
 .cand-panel{
-    background:#FFFBEB; border:1.5px solid #F59E0B;
+    background:#FBEBEC; border:1.5px solid #C01820;
     border-radius:8px; padding:16px 20px; margin-bottom:12px;
 }
-.cand-hdr{font-size:.90rem;font-weight:700;color:#92400E;
+.cand-hdr{font-size:.90rem;font-weight:700;color:#8E1119;
           margin-bottom:14px;display:flex;align-items:center;gap:8px;}
-.cand-card{background:#FFF;border:1px solid #E2E6EA;border-radius:6px;padding:14px;}
-.cand-card.sel{border-color:#1565C0;background:#EEF6FF;}
-.cand-card-title{font-size:.88rem;font-weight:700;color:#1A2332;margin-bottom:8px;}
-.cand-card-body{font-size:.79rem;color:#555;line-height:1.9;}
+.cand-card{background:#FFF;border:1px solid #E5E3DC;border-radius:6px;padding:14px;}
+.cand-card.sel{border-color:#C01820;background:#FBEBEC;}
+.cand-card-title{font-size:.88rem;font-weight:700;color:#2C2C2A;margin-bottom:8px;}
+.cand-card-body{font-size:.79rem;color:#6B6A66;line-height:1.9;}
 .diff-chip{
-    display:inline-block;background:#DBEAFE;color:#1D4ED8;
+    display:inline-block;background:#FBEBEC;color:#8E1119;
     border-radius:3px;padding:0 6px;font-size:.75rem;font-weight:600;
 }
-.cand-foot{font-size:.72rem;color:#AAA;margin-top:10px;}
+.cand-foot{font-size:.72rem;color:#9A9893;margin-top:10px;}
 
 /* ── 凡例 ────────────────────────────────────────────────── */
-.legend{display:flex;gap:14px;font-size:.73rem;color:#666;
+.legend{display:flex;gap:14px;font-size:.73rem;color:#6B6A66;
         align-items:center;margin-top:6px;}
 .ldot{width:9px;height:9px;border-radius:2px;
       display:inline-block;margin-right:3px;vertical-align:middle;}
 
-/* ── 出力サマリー（サイドバー内） ────────────────────────── */
+/* ── 出力サマリー ─────────────────────────────────────────── */
 .out-summary{
-    background:#162B40; border:1px solid #2A4A60;
+    background:#1C1B19; border:1px solid #3D3C39;
     border-radius:6px; padding:10px 14px; margin-bottom:8px;
     font-size:.82rem;
 }
 .out-summary table{width:100%;border-collapse:collapse;}
-.out-summary td{padding:3px 0;color:#90B8D0;}
-.out-summary td.n{text-align:right;font-weight:700;color:#64B5F6;}
-.out-summary .note{font-size:.70rem;color:#5A7A90;margin-top:6px;
-                   border-top:1px solid #2A4060;padding-top:5px;}
+.out-summary td{padding:3px 0;color:#9A9893;}
+.out-summary td.n{text-align:right;font-weight:700;color:#FBEBEC;}
+.out-summary .note{font-size:.70rem;color:#5A5855;margin-top:6px;
+                   border-top:1px solid #3D3C39;padding-top:5px;}
 
 /* ── sublabel ────────────────────────────────────────────── */
-.sublabel{border-bottom:1px solid #1565C0;padding-bottom:2px;
-          font-weight:700;font-size:.82rem;color:#333;margin-bottom:6px;}
+.sublabel{border-bottom:1px solid #C01820;padding-bottom:2px;
+          font-weight:700;font-size:.82rem;color:#2C2C2A;margin-bottom:6px;}
 
 /* ── 構造化ツリー行 ─────────────────────────────────────── */
 .tree-row{
-    padding:5px 12px; border-bottom:1px solid #F0F2F5;
-    font-size:.84rem; color:#333; display:flex; align-items:center; gap:6px;
+    padding:5px 12px; border-bottom:1px solid #E5E3DC;
+    font-size:.84rem; color:#2C2C2A; display:flex; align-items:center; gap:6px;
 }
-.tree-row:hover{background:#F5F7FA;}
+.tree-row:hover{background:#F4F2EE;}
 .status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
 
 /* ── 候補ナビ（前/次） ───────────────────────────────────── */
 .cand-nav{
     display:flex; align-items:center; justify-content:space-between;
-    padding:8px 0; margin-bottom:10px; font-size:.82rem; color:#555;
+    padding:8px 0; margin-bottom:10px; font-size:.82rem; color:#6B6A66;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -310,7 +310,7 @@ def _calc_status(row):
     if _chain_key(row) in st.session_state.row_selections: return "確定"
     return "要選択"
 
-STATUS_BG = {"確定":"#F0FDF4","要選択":"#FFFBEB","未マッチ":"#F9FAFB"}
+STATUS_BG = {"確定":"#FFFFFF","要選択":"#FBEBEC","未マッチ":"#F1EFE8"}
 
 # ─── DB ルックアップ ─────────────────────────────────────────
 _DISP_D = ["測定項目","規格値","管理基準値","測定頻度","摘要"]
@@ -373,11 +373,11 @@ def _get_df_raw():
 with st.sidebar:
     # ─ タイトル ──────────────────────────────────────────────
     st.markdown(
-        '<div style="padding:16px 16px 14px;border-bottom:1px solid #263447;'
+        '<div style="padding:16px 16px 14px;border-bottom:1px solid #3D3C39;'
         'margin-bottom:4px;">'
-        '<div style="font-size:.90rem;font-weight:800;color:#D4E8F8;'
+        '<div style="font-size:.90rem;font-weight:800;color:#FFFFFF;'
         'letter-spacing:.03em;">施工管理計画</div>'
-        '<div style="font-size:.68rem;color:#4E7FA8;margin-top:3px;">'
+        '<div style="font-size:.68rem;color:#9A9893;margin-top:3px;">'
         'Automated Planning System</div>'
         '</div>',
         unsafe_allow_html=True,
@@ -525,7 +525,7 @@ def _render_structure():
 
     df_raw = _get_df_raw()
 
-    DOT_COLOR = {"確定":"#34A853","要選択":"#F59E0B","未マッチ":"#CCC"}
+    DOT_COLOR = {"確定":"#8E1119","要選択":"#C01820","未マッチ":"#9A9893"}
 
     # テーブルとして表示
     df_disp = pd.DataFrame({
@@ -534,7 +534,7 @@ def _render_structure():
     })
     sts_idx = {i: row["状態"] for i,(_,row) in enumerate(df_raw.iterrows())}
 
-    STATUS_BG2 = {"確定":"#F0FDF4","要選択":"#FFFBEB","未マッチ":"#F9FAFB"}
+    STATUS_BG2 = {"確定":"#FFFFFF","要選択":"#FBEBEC","未マッチ":"#F1EFE8"}
     def _rs(sts):
         def _s(row):
             bg = STATUS_BG2.get(sts.get(row.name,""),"")
@@ -551,9 +551,9 @@ def _render_structure():
     )
     st.markdown(
         '<div class="legend">'
-        '<span><span class="ldot" style="background:#1B6E2A"></span>確定</span>'
-        '<span><span class="ldot" style="background:#B45309"></span>要選択</span>'
-        '<span><span class="ldot" style="background:#9E9E9E"></span>未マッチ</span>'
+        '<span><span class="ldot" style="background:#8E1119"></span>確定</span>'
+        '<span><span class="ldot" style="background:#C01820"></span>要選択</span>'
+        '<span><span class="ldot" style="background:#9A9893"></span>未マッチ</span>'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -644,9 +644,9 @@ def _render_matching():
 
     st.markdown(
         '<div class="legend">'
-        '<span><span class="ldot" style="background:#1B6E2A"></span>確定</span>'
-        '<span><span class="ldot" style="background:#B45309"></span>要選択（行クリックで候補展開）</span>'
-        '<span><span class="ldot" style="background:#9E9E9E"></span>未マッチ</span>'
+        '<span><span class="ldot" style="background:#8E1119"></span>確定</span>'
+        '<span><span class="ldot" style="background:#C01820"></span>要選択（行クリックで候補展開）</span>'
+        '<span><span class="ldot" style="background:#9A9893"></span>未マッチ</span>'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -718,7 +718,7 @@ def _render_matching():
                 parts  = [p.strip() for p in lbl.split(" / ")]
                 ctitle = " / ".join(parts[1:]) if len(parts)>1 else parts[0]
                 is_sel = lbl in cur_d
-                brd    = "border:1.5px solid #1565C0;background:#EEF6FF;" if is_sel else ""
+                brd    = "border:1.5px solid #C01820;background:#FBEBEC;" if is_sel else ""
                 body   = _card_html(db_rows_d[i], _DISP_D, diff_d)
                 st.markdown(
                     f'<div class="cand-card" style="{brd}">'
@@ -821,12 +821,12 @@ def _render_output():
         f'<div style="font-size:.88rem;font-weight:700;color:#1A2332;margin-bottom:12px;">'
         f'出力内容</div>'
         f'<table style="width:100%;font-size:.84rem;border-collapse:collapse;">'
-        f'<tr><td style="padding:5px 0;color:#555;">出来形管理</td>'
-        f'<td style="text-align:right;font-weight:700;color:#1565C0;">{len(out_d_l)} 件</td></tr>'
-        f'<tr><td style="padding:5px 0;color:#555;">品質管理</td>'
-        f'<td style="text-align:right;font-weight:700;color:#1565C0;">{len(out_h_l)} 件</td></tr>'
-        f'<tr><td style="padding:5px 0;color:#555;">撮影箇所</td>'
-        f'<td style="text-align:right;font-weight:700;color:#1565C0;">{len(out_p_l)} 件</td></tr>'
+        f'<tr><td style="padding:5px 0;color:#6B6A66;">出来形管理</td>'
+        f'<td style="text-align:right;font-weight:700;color:#C01820;">{len(out_d_l)} 件</td></tr>'
+        f'<tr><td style="padding:5px 0;color:#6B6A66;">品質管理</td>'
+        f'<td style="text-align:right;font-weight:700;color:#C01820;">{len(out_h_l)} 件</td></tr>'
+        f'<tr><td style="padding:5px 0;color:#6B6A66;">撮影箇所</td>'
+        f'<td style="text-align:right;font-weight:700;color:#C01820;">{len(out_p_l)} 件</td></tr>'
         f'</table>'
         f'<div style="font-size:.73rem;color:#AAA;margin-top:10px;border-top:1px solid #EEE;padding-top:8px;">'
         f'要選択で未確認の行は全候補を自動採用します</div>'
