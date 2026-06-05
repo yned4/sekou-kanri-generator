@@ -436,17 +436,8 @@ with st.sidebar:
 
     with st.expander("？  使い方"):
         st.markdown("""
-**①取込** PDFをアップロードして解析
+① PDFアップロード → ② 工種確認 → ③ マッチング確認（行クリックで候補選択）→ ④ Excel出力
 
-**②構造化** 抽出された工種を確認
-
-**③マッチング** 国交省基準DBとの対応を確認・行クリックで候補選択へ
-
-**④候補選択** 複数候補がある工種の工法を確定
-
-最後に「施工管理計画を出力」でExcel生成
-
----
 基準DB更新時は `build_db.py` を再実行
 """)
 
@@ -887,22 +878,66 @@ def _render_output():
 # ===========================================================================
 # 基準DB確認
 # ===========================================================================
+def _df_search(df: pd.DataFrame, keyword: str) -> pd.DataFrame:
+    """全列を対象にキーワード絞り込み（大文字小文字無視）。"""
+    if not keyword.strip():
+        return df
+    kw = keyword.strip().lower()
+    mask = df.apply(lambda col: col.astype(str).str.lower().str.contains(kw, na=False)).any(axis=1)
+    return df[mask]
+
+
+def _render_db_tab(df: pd.DataFrame, tab_key: str, keyword: str) -> None:
+    """DB各タブ共通：工種フィルタ＋件数表示＋dataframe。"""
+    kojyo_opts = sorted(df["工種"].dropna().unique().tolist()) if "工種" in df.columns else []
+    selected = st.multiselect(
+        "工種で絞り込み",
+        kojyo_opts,
+        key=f"db_kojyo_{tab_key}",
+        placeholder="すべての工種",
+    )
+    df_f = df[df["工種"].isin(selected)] if selected else df
+    df_f = _df_search(df_f, keyword)
+    st.caption(f"{len(df_f):,} / {len(df):,} 行表示")
+    st.dataframe(df_f, use_container_width=True, height=520, hide_index=True)
+
+
 def _render_db_view():
     st.markdown(
         '<div class="page-card">'
-        '<div class="page-card-title">🗄 国交省基準 DB</div>'
+        '<div class="page-card-title">国交省基準 DB</div>'
         f'<div class="page-card-sub">Ver. {version_info.get("バージョン","不明")}　'
         f'{version_info.get("作成日時","")}</div>'
         '</div>',
         unsafe_allow_html=True,
     )
-    tab_d,tab_h,tab_p = st.tabs(["出来形管理","品質管理","撮影箇所"])
+
+    # ── 検索 & ダウンロード ────────────────────────────────────
+    col_kw, col_dl = st.columns([4, 1])
+    with col_kw:
+        keyword = st.text_input(
+            "キーワード検索",
+            placeholder="工種・測定項目・規格値 などで絞り込み",
+            label_visibility="collapsed",
+        )
+    with col_dl:
+        with open(str(DB_PATH), "rb") as _f:
+            st.download_button(
+                "DB Excel をダウンロード",
+                data=_f.read(),
+                file_name=DB_PATH.name,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+            )
+
+    # ── タブ ─────────────────────────────────────────────────
+    tab_d, tab_h, tab_p = st.tabs(["出来形管理", "品質管理", "撮影箇所"])
     with tab_d:
-        st.dataframe(kojyo_data["出来形管理"], use_container_width=True, height=560, hide_index=True)
+        _render_db_tab(kojyo_data["出来形管理"], "d", keyword)
     with tab_h:
-        st.dataframe(kojyo_data["品質管理"], use_container_width=True, height=560, hide_index=True)
+        _render_db_tab(kojyo_data["品質管理"], "h", keyword)
     with tab_p:
-        st.dataframe(kojyo_data["撮影箇所"], use_container_width=True, height=560, hide_index=True)
+        _render_db_tab(kojyo_data["撮影箇所"], "p", keyword)
 
 # ===========================================================================
 # ルーティング
