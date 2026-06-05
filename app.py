@@ -697,7 +697,13 @@ def _render_matching():
     if n_yo == 0 and (n_kaku > 0 or n_mi > 0):
         ok_col, go_col = st.columns([4, 1])
         with ok_col:
-            st.success("要選択がすべて確定済みです。")
+            st.markdown(
+                '<div style="display:flex;align-items:center;height:38px;'
+                'padding:0 14px;background:#D1FAE5;border-left:4px solid #10B981;'
+                'border-radius:4px;font-size:.88rem;color:#065F46;font-weight:600;">'
+                '✓ 要選択がすべて確定済みです。</div>',
+                unsafe_allow_html=True,
+            )
         with go_col:
             if st.button("④ 出力へ →", type="primary",
                          use_container_width=True, key="match_to_output"):
