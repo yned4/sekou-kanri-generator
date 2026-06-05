@@ -203,20 +203,25 @@ def _compute_shauchi(規格値_val: str) -> str:
 def _reshape_hinshitsu(df: pd.DataFrame) -> pd.DataFrame:
     """
     品質管理DataFrameを出力列形式に変換する。
+
+    工種・種別は国交省DB品質管理シートの値をそのまま使用する。
+    （出来形と異なり、数量総括表の工種へのマッピングは行わない）
+
     削除: 試験区分、試験成績表等による確認
     追加: 社内規格値（空欄）
     リネーム: 試験時期・頻度→試験基準、摘要→備考
     """
-    out = pd.DataFrame()
-    out["工種"]       = df.get("工種", "")
-    out["種別"]       = df.get("種別", "")
-    out["試験項目"]   = df.get("試験項目", "")
-    out["試験方法"]   = df.get("試験方法", "")
-    out["規格値"]     = df.get("規格値", "")
+    out = pd.DataFrame(index=df.index)
+    # 国交省DB品質管理シートの工種名をそのまま使用
+    out["工種"]       = df["工種"].fillna("")
+    out["種別"]       = df["種別"].fillna("")
+    out["試験項目"]   = df["試験項目"].fillna("")
+    out["試験方法"]   = df["試験方法"].fillna("")
+    out["規格値"]     = df["規格値"].fillna("")
     out["社内規格値"] = df["規格値"].apply(_compute_shauchi)
-    out["試験基準"]   = df.get("試験時期・頻度", "")
-    out["備考"]       = df.get("摘要", "")
-    return out
+    out["試験基準"]   = df["試験時期・頻度"].fillna("") if "試験時期・頻度" in df.columns else ""
+    out["備考"]       = df["摘要"].fillna("") if "摘要" in df.columns else ""
+    return out.reset_index(drop=True)
 
 
 def _reshape_dekigata(df: pd.DataFrame, kojyo_to_suryo: dict = None) -> pd.DataFrame:
