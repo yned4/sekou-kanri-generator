@@ -396,6 +396,7 @@ with st.sidebar:
         ("upload",    "① 取込",      True),
         ("structure", "② 構造化",    has_data),
         ("matching",  "③ マッチング", has_data),
+        ("output",    "④ 出力",      has_data),
     ]
     for key, label, enabled in NAV:
         # candidate ページにいるときは matching をアクティブ扱い
@@ -650,11 +651,6 @@ def _render_matching():
         unsafe_allow_html=True,
     )
 
-    # ── 出力セクション（テーブル直下・常に表示） ─────────────
-    _render_output_section()
-
-    st.markdown("---")
-
     # ── 候補選択パネル ──────────────────────────────────────
     if not has_sel:
         st.markdown(
@@ -786,38 +782,72 @@ def _render_matching():
             st.caption(f"DB 目次：{bc}")
 
 
-def _render_output_section():
-    """施工管理計画の出力ボタン・ダウンロードボタンを描画する。"""
-    if st.session_state.df_match is None:
-        return
-
-    st.divider()
-    df_tmp = _get_df_raw()
-    out_d_l, out_h_l, out_p_l = _collect_labels(df_tmp)
-    can_out = bool(out_d_l or out_h_l or out_p_l)
-
+def _render_output():
+    """④ 出力ページ。"""
+    si = st.session_state.suryo_info
     st.markdown(
-        f'<div style="background:#F8FAFC;border:1px solid #E2E6EA;border-radius:8px;'
-        f'padding:16px 20px;margin-top:8px;">'
-        f'<div style="font-size:.85rem;font-weight:700;color:#1A2332;margin-bottom:10px;">'
-        f'出力内容</div>'
-        f'<div style="font-size:.82rem;color:#555;line-height:2.0;">'
-        f'出来形管理：<b>{len(out_d_l)}</b> 件　'
-        f'品質管理：<b>{len(out_h_l)}</b> 件　'
-        f'撮影箇所：<b>{len(out_p_l)}</b> 件'
-        f'</div>'
-        f'<div style="font-size:.72rem;color:#AAA;margin-top:4px;">'
-        f'未確認の要選択は全候補を自動採用</div>'
+        f'<div class="page-card">'
+        f'<div class="page-card-title">④ 出力 — 施工管理計画 Excel 生成</div>'
+        f'<div class="page-card-sub">{si.get("工事名","") if si else ""}</div>'
         f'</div>',
         unsafe_allow_html=True,
     )
 
-    col_out, col_dl = st.columns([2, 1])
+    df_tmp = _get_df_raw()
+    out_d_l, out_h_l, out_p_l = _collect_labels(df_tmp)
+    can_out = bool(out_d_l or out_h_l or out_p_l)
+
+    n_kaku = int((df_tmp["状態"] == "確定").sum())
+    n_yo   = int((df_tmp["状態"] == "要選択").sum())
+    n_mi   = int((df_tmp["状態"] == "未マッチ").sum())
+
+    # ── マッチング状況サマリー ────────────────────────────────
+    st.markdown(
+        f'<div class="metrics-row">'
+        f'<div class="m-card kaku"><div class="m-val">{n_kaku}</div>'
+        f'<div class="m-lbl">確定</div></div>'
+        f'<div class="m-card yo"><div class="m-val">{n_yo}</div>'
+        f'<div class="m-lbl">要選択</div></div>'
+        f'<div class="m-card mi"><div class="m-val">{n_mi}</div>'
+        f'<div class="m-lbl">未マッチ</div></div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── 出力内容確認 ─────────────────────────────────────────
+    st.markdown(
+        f'<div style="background:#F8FAFC;border:1px solid #E2E6EA;border-radius:8px;'
+        f'padding:20px 24px;margin-bottom:16px;">'
+        f'<div style="font-size:.88rem;font-weight:700;color:#1A2332;margin-bottom:12px;">'
+        f'出力内容</div>'
+        f'<table style="width:100%;font-size:.84rem;border-collapse:collapse;">'
+        f'<tr><td style="padding:5px 0;color:#555;">出来形管理</td>'
+        f'<td style="text-align:right;font-weight:700;color:#1565C0;">{len(out_d_l)} 件</td></tr>'
+        f'<tr><td style="padding:5px 0;color:#555;">品質管理</td>'
+        f'<td style="text-align:right;font-weight:700;color:#1565C0;">{len(out_h_l)} 件</td></tr>'
+        f'<tr><td style="padding:5px 0;color:#555;">撮影箇所</td>'
+        f'<td style="text-align:right;font-weight:700;color:#1565C0;">{len(out_p_l)} 件</td></tr>'
+        f'</table>'
+        f'<div style="font-size:.73rem;color:#AAA;margin-top:10px;border-top:1px solid #EEE;padding-top:8px;">'
+        f'要選択で未確認の行は全候補を自動採用します</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    if n_yo > 0:
+        confirmed = sum(
+            1 for i, (_, r) in enumerate(df_tmp.iterrows())
+            if r["状態"] == "要選択" and _chain_key(r) in st.session_state.row_selections
+        )
+        st.info(f"要選択 {n_yo} 件中 {confirmed} 件が確定済みです。未確認の {n_yo - confirmed} 件は全候補を自動採用します。"
+                f"　→ ③マッチングで確認できます。")
+
+    # ── ボタン ───────────────────────────────────────────────
+    col_out, col_dl, _ = st.columns([2, 1, 1])
     with col_out:
         if st.button("施工管理計画を出力", type="primary",
                      use_container_width=True, disabled=not can_out, key="btn_out"):
             try:
-                si = st.session_state.suryo_info
                 with st.spinner("Excel生成中..."):
                     filtered = filter_by_row_labels(kojyo_data, out_d_l, out_h_l, out_p_l)
                     df_raw_out = _get_df_raw()
@@ -837,6 +867,7 @@ def _render_output_section():
                 st.session_state.excel_cache = excel_bytes
                 st.session_state.excel_fname = (f"施工管理計画_{safe}.xlsx" if safe
                                                 else "施工管理計画.xlsx")
+                st.success("生成完了！ダウンロードボタンからファイルを取得してください。")
                 st.rerun()
             except Exception:
                 st.error("生成エラー")
@@ -884,5 +915,7 @@ elif page == "structure" and has_data:
     _render_structure()
 elif page in ("matching", "candidate") and has_data:
     _render_matching()
+elif page == "output" and has_data:
+    _render_output()
 else:
     _render_upload()
