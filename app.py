@@ -327,7 +327,7 @@ unique_kojyo = get_unique_kojyo(kojyo_data)
 # ===========================================================================
 # セッション初期化
 # ===========================================================================
-for _k in ["suryo_info","df_match","selected_idx"]:
+for _k in ["suryo_info","df_match","selected_idx","excluded_rows"]:
     if _k not in st.session_state: st.session_state[_k] = None
 if "row_selections" not in st.session_state: st.session_state["row_selections"] = {}
 if "page"           not in st.session_state: st.session_state["page"]           = "upload"
@@ -533,6 +533,7 @@ def _render_upload():
                             del st.session_state[k]
                     st.session_state.suryo_info     = si
                     st.session_state.df_match       = dm
+                    st.session_state.excluded_rows  = si.get("除外行", None)
                     st.session_state.selected_idx   = None
                     st.session_state.row_selections = {}
                     st.session_state.excel_cache    = None
@@ -592,6 +593,24 @@ def _render_structure():
         '</div>',
         unsafe_allow_html=True,
     )
+    # ── 除外された行 ─────────────────────────────────────────
+    df_ex = st.session_state.get("excluded_rows")
+    if df_ex is not None and not df_ex.empty:
+        with st.expander(f"除外された行を確認する（{len(df_ex)} 件）"):
+            st.caption(
+                "以下の行は施工管理基準の照合対象外として除外されました。"
+                "誤って除外されている項目がある場合はお知らせください。"
+            )
+            st.dataframe(
+                df_ex,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "項目名":   st.column_config.TextColumn("項目名",   width="large"),
+                    "除外理由": st.column_config.TextColumn("除外理由", width="medium"),
+                },
+            )
+
     # 下部ナビ
     st.markdown('<div class="page-nav">', unsafe_allow_html=True)
     nav_l, nav_r = st.columns(2)

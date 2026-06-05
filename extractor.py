@@ -544,6 +544,7 @@ def extract_suryo(pdf_path: str) -> dict:
     """
     工事名 = ""
     all_records: list = []
+    excluded_records: list = []
 
     with pdfplumber.open(pdf_path) as pdf:
         # ── 工事名抽出 ──────────────────────────────────────
@@ -589,10 +590,13 @@ def extract_suryo(pdf_path: str) -> dict:
                 if not val:
                     continue
                 if val.startswith("(") or val.startswith("（"):
+                    excluded_records.append({"項目名": val, "除外理由": "小計・合計行（括弧始まり）"})
                     continue
                 if val in SURYO_COST_WORDS:
+                    excluded_records.append({"項目名": val, "除外理由": "費用集計項目"})
                     continue
                 if "工事区分" in val or "工事名" in val:
+                    excluded_records.append({"項目名": val, "除外理由": "ヘッダー行"})
                     continue
 
                 all_records.append({
@@ -637,10 +641,14 @@ def extract_suryo(pdf_path: str) -> dict:
     for col in SURYO_LEVEL_COLS:
         kojyo_set.update(v for v in df_hierarchy[col].unique() if v)
 
+    df_excluded = pd.DataFrame(excluded_records, columns=["項目名", "除外理由"]) \
+        if excluded_records else pd.DataFrame(columns=["項目名", "除外理由"])
+
     return {
         "工事名":    工事名,
         "工種リスト": sorted(kojyo_set),
         "工種階層":   df_hierarchy,
+        "除外行":     df_excluded,
     }
 
 
