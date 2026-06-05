@@ -59,11 +59,48 @@ def _make_thin_border() -> Border:
     return Border(left=thin, right=thin, top=thin, bottom=thin)
 
 
+def _merge_col_cells(ws, col_idx: int, data_start_row: int, data_end_row: int) -> None:
+    """
+    指定列の連続する同値セルを縦結合する。
+    結合後は上端セルに値・スタイルを保持し、中央揃えにする。
+    """
+    if data_end_row < data_start_row:
+        return
+    thin = Side(style="thin", color="AAAAAA")
+
+    row = data_start_row
+    while row <= data_end_row:
+        cell_val = ws.cell(row=row, column=col_idx).value
+        # 同じ値が続く範囲を探す
+        end_row = row
+        while (end_row + 1 <= data_end_row
+               and ws.cell(row=end_row + 1, column=col_idx).value == cell_val):
+            end_row += 1
+
+        if end_row > row:
+            # 複数行 → セル結合
+            ws.merge_cells(
+                start_row=row, start_column=col_idx,
+                end_row=end_row, end_column=col_idx,
+            )
+            top_cell = ws.cell(row=row, column=col_idx)
+            top_cell.alignment = Alignment(
+                horizontal="left", vertical="center", wrap_text=True
+            )
+            # 結合セルの外枠ボーダーを設定
+            top_cell.border = Border(
+                left=thin, right=thin, top=thin, bottom=thin
+            )
+
+        row = end_row + 1
+
+
 def _write_sheet(
     ws,
     df: pd.DataFrame,
     section_col: Optional[str] = None,
     title: str = "",
+    merge_cols: Optional[list] = None,
 ) -> None:
     """
     DataFrameを1シートに書き込む。
@@ -78,6 +115,7 @@ def _write_sheet(
 
     section_col: この列の値が変わるタイミングでセクション区切り行の背景色を変える。
     title: 行1 B列に表示するシート固有タイトル文字列。
+    merge_cols: 連続する同値セルを縦結合する列名リスト。
     """
     header_font, header_fill, header_align = _make_header_style()
     data_align  = _make_data_align()
@@ -170,6 +208,14 @@ def _write_sheet(
             max_len = max(max_len, cell_max)
         width = min(max(max_len + 2, MIN_COL_WIDTH), MAX_COL_WIDTH)
         ws.column_dimensions[col_letter].width = width
+
+    # ── 指定列の縦セル結合 ────────────────────────────────────
+    if merge_cols and len(df) > 0:
+        data_end_row = 5 + len(df)  # ヘッダー5行 + データ行数
+        col_name_to_idx = {name: idx for idx, name in enumerate(df.columns, start=2)}
+        for col_name in merge_cols:
+            if col_name in col_name_to_idx:
+                _merge_col_cells(ws, col_name_to_idx[col_name], 6, data_end_row)
 
 
 
@@ -397,19 +443,23 @@ def write_excel(
 
     # ── 品管一覧 ──────────────────────────────────────────
     ws_h = wb.create_sheet(SHEET_HINSHITSU)
-    _write_sheet(ws_h, df_h, title=_SHEET_TITLE[SHEET_HINSHITSU])
+    _write_sheet(ws_h, df_h, title=_SHEET_TITLE[SHEET_HINSHITSU],
+                 merge_cols=["工種", "種別"])
 
     # ── 出来形一覧（DEKIGATA_SPLIT_THRESHOLD超過時は2シートに分割） ──
     if len(df_d) > DEKIGATA_SPLIT_THRESHOLD:
         df_d1 = df_d.iloc[:DEKIGATA_SPLIT_THRESHOLD].reset_index(drop=True)
         df_d2 = df_d.iloc[DEKIGATA_SPLIT_THRESHOLD:].reset_index(drop=True)
         ws_d1 = wb.create_sheet(SHEET_DEKIGATA)
-        _write_sheet(ws_d1, df_d1, title=_SHEET_TITLE[SHEET_DEKIGATA])
+        _write_sheet(ws_d1, df_d1, title=_SHEET_TITLE[SHEET_DEKIGATA],
+                     merge_cols=["工種", "種別"])
         ws_d2 = wb.create_sheet(SHEET_DEKIGATA2)
-        _write_sheet(ws_d2, df_d2, title=_SHEET_TITLE[SHEET_DEKIGATA2])
+        _write_sheet(ws_d2, df_d2, title=_SHEET_TITLE[SHEET_DEKIGATA2],
+                     merge_cols=["工種", "種別"])
     else:
         ws_d = wb.create_sheet(SHEET_DEKIGATA)
-        _write_sheet(ws_d, df_d, title=_SHEET_TITLE[SHEET_DEKIGATA])
+        _write_sheet(ws_d, df_d, title=_SHEET_TITLE[SHEET_DEKIGATA],
+                     merge_cols=["工種", "種別"])
 
     # ── 撮影箇所 ──────────────────────────────────────────
     ws_p = wb.create_sheet(SHEET_PHOTO)
