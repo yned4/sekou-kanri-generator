@@ -1,6 +1,7 @@
 """
 excel_writer.py
 抽出済みDataFrameを施工管理計画Excelファイルに書き出す。
+手動追加行（custom_rows）対応済み。
 
 使い方（単体テスト）:
     python excel_writer.py  # extractor.py と組み合わせて動作確認
