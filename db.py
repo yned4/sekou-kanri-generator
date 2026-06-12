@@ -35,7 +35,9 @@ def _client():
         url = st.secrets["supabase"]["url"]
         key = st.secrets["supabase"]["key"]
         return create_client(url, key)
-    except Exception:
+    except Exception as e:
+        # 設定ミスや接続エラーの場合はsession_stateにエラーを記録
+        st.session_state["_db_error"] = str(e)
         return None
 
 
