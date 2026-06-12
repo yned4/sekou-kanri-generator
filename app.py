@@ -9,7 +9,6 @@ import json
 import re
 import tempfile
 import traceback
-from pathlib import Path
 
 import pandas as pd
 import streamlit as st
@@ -1047,28 +1046,14 @@ def _render_matching():
 
 
 # ===========================================================================
-# プロジェクト永続ストレージ（手動追加行）
+# 手動追加行ストレージ（session_state ベース）
 # ===========================================================================
-_PROJECT_DIR = Path("data/projects")
 
-def _proj_path(工事名: str) -> Path:
-    safe = re.sub(r'[\\/:*?"<>|　 ]', '_', 工事名)
-    return _PROJECT_DIR / f"{safe}.json"
+def _get_custom_rows() -> list:
+    return st.session_state.get("custom_rows", [])
 
-def _load_proj(工事名: str) -> dict:
-    p = _proj_path(工事名)
-    if p.exists():
-        try:
-            return json.loads(p.read_text(encoding="utf-8"))
-        except Exception:
-            pass
-    return {"custom_rows": []}
-
-def _save_proj(工事名: str, data: dict):
-    _PROJECT_DIR.mkdir(parents=True, exist_ok=True)
-    _proj_path(工事名).write_text(
-        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+def _set_custom_rows(rows: list):
+    st.session_state["custom_rows"] = rows
 
 # シートごとの列定義（出力Excelの列順と一致させる）
 _CUSTOM_SHEET_COLS = {
@@ -1079,10 +1064,45 @@ _CUSTOM_SHEET_COLS = {
 
 def _render_custom_rows(工事名: str):
     """手動行の追加・管理UI（出力ページに埋め込む）"""
-    proj = _load_proj(工事名)
-    custom_rows = proj.get("custom_rows", [])
+    custom_rows = _get_custom_rows()
 
     with st.expander("手動行の追加・管理", expanded=False):
+        # ── 設定の保存 / 読み込み ──────────────────────────────
+        sc_dl, sc_ul = st.columns(2)
+        with sc_dl:
+            safe = re.sub(r'[\\/:*?"<>|　 ]', '_', 工事名) if 工事名 else "project"
+            json_bytes = json.dumps(
+                {"工事名": 工事名, "custom_rows": custom_rows},
+                ensure_ascii=False, indent=2,
+            ).encode("utf-8")
+            st.download_button(
+                "📥 設定を保存 (JSON)",
+                data=json_bytes,
+                file_name=f"custom_rows_{safe}.json",
+                mime="application/json",
+                help="手動行の設定をJSONファイルとしてダウンロードできます。次回アプリを開く際に読み込んで復元できます。",
+                key="cr_download",
+            )
+        with sc_ul:
+            uploaded = st.file_uploader(
+                "📤 設定を読み込む (JSON)",
+                type=["json"],
+                key="cr_upload",
+                help="以前保存したJSONファイルをアップロードして手動行を復元します。",
+                label_visibility="collapsed",
+            )
+            if uploaded is not None:
+                try:
+                    loaded = json.loads(uploaded.read().decode("utf-8"))
+                    loaded_rows = loaded.get("custom_rows", [])
+                    _set_custom_rows(loaded_rows)
+                    st.toast(f"{len(loaded_rows)} 件の手動行を読み込みました")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"読み込みに失敗しました: {e}")
+
+        st.divider()
+
         # ── 追加フォーム ────────────────────────────────────────
         sheet = st.selectbox("追加するシート", list(_CUSTOM_SHEET_COLS), key="cr_sheet")
         cols_def = _CUSTOM_SHEET_COLS[sheet]
@@ -1112,12 +1132,13 @@ def _render_custom_rows(工事名: str):
             if not any(v.strip() for v in row_data.values()):
                 st.warning("少なくとも1つのフィールドを入力してください。")
             else:
+                custom_rows = _get_custom_rows()
                 custom_rows.append({
                     "sheet": sheet,
                     "after_kojyo": after_kojyo.strip() if pos_type == "指定した工種の後に挿入" else "末尾",
                     "fields": row_data,
                 })
-                _save_proj(工事名, {"custom_rows": custom_rows})
+                _set_custom_rows(custom_rows)
                 st.toast("追加しました")
                 st.rerun()
 
@@ -1143,8 +1164,9 @@ def _render_custom_rows(工事名: str):
                     )
                 with c2:
                     if st.button("削除", key=f"cr_del_{i}"):
+                        custom_rows = _get_custom_rows()
                         custom_rows.pop(i)
-                        _save_proj(工事名, {"custom_rows": custom_rows})
+                        _set_custom_rows(custom_rows)
                         st.rerun()
         else:
             st.caption("登録済みの手動行はありません")
@@ -1234,11 +1256,10 @@ def _render_output():
                             db_kojyo = label.split(" / ")[0].strip()
                             if db_kojyo and db_kojyo not in dmap:
                                 dmap[db_kojyo] = suryo_kojyo
-                    _proj = _load_proj(si["工事名"])
                     excel_bytes = write_excel(
                         filtered, 工事名=si["工事名"],
                         dekigata_kojyo_map=dmap,
-                        custom_rows=_proj.get("custom_rows", []),
+                        custom_rows=_get_custom_rows(),
                     )
                 safe = re.sub(r'[\\/:*?"<>|　 ]', '_', si["工事名"])
                 st.session_state.excel_cache = excel_bytes
