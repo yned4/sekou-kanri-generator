@@ -479,7 +479,7 @@ with st.sidebar:
 
     # ─ その他ナビ ────────────────────────────────────────────
     st.markdown("### TOOLS")
-    if st.button("📁 プロジェクト管理", use_container_width=True,
+    if st.button("プロジェクト管理", use_container_width=True,
                  type="primary" if page=="project_mgmt" else "secondary", key="nav_proj"):
         st.session_state.page = "project_mgmt"; st.rerun()
     if st.button("基準DB確認", use_container_width=True,
@@ -1197,7 +1197,7 @@ def _render_sheet_editor(kojyo_name: str, sheets: dict):
     # ── ヘッダー & ダウンロード（1ボタン） ───────────────
     hcol, dcol = st.columns([3, 1])
     with hcol:
-        st.markdown(f"### 📝 {kojyo_name}")
+        st.markdown(f"### {kojyo_name}")
     with dcol:
         try:
             excel_bytes = write_excel_from_dfs(
@@ -1206,7 +1206,7 @@ def _render_sheet_editor(kojyo_name: str, sheets: dict):
                 df_p=sheets["撮影箇所"],
             )
             st.download_button(
-                "⬇ Excelをダウンロード",
+                "↓ Excelをダウンロード",
                 data=excel_bytes,
                 file_name=fname,
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1244,7 +1244,7 @@ def _render_sheet_editor(kojyo_name: str, sheets: dict):
                 key=f"de_{kojyo_name}_{sk}",
                 hide_index=False,
             )
-            if st.button("💾 変更を保存", key=f"save_{kojyo_name}_{sk}"):
+            if st.button("変更を保存", key=f"save_{kojyo_name}_{sk}"):
                 sheets[sk] = edited_df.reset_index(drop=True)
                 st.session_state.project_sheets = sheets
                 if db.is_available():
@@ -1255,7 +1255,7 @@ def _render_sheet_editor(kojyo_name: str, sheets: dict):
             st.divider()
 
             # ── ② 行を挿入 ───────────────────────────────
-            st.markdown("#### ➕ 行を挿入")
+            st.markdown("#### 行を挿入")
             with st.container(border=True):
                 # 挿入位置をセレクトボックスで選択
                 pos_options = ["── 先頭に追加"] + [_row_label(df, i) for i in range(n)]
@@ -1286,7 +1286,7 @@ def _render_sheet_editor(kojyo_name: str, sheets: dict):
                                 placeholder=f"{col}を入力",
                             )
 
-                if st.button("➕ 挿入する", key=f"ins_btn_{kojyo_name}_{sk}", type="primary"):
+                if st.button("挿入する", key=f"ins_btn_{kojyo_name}_{sk}", type="primary"):
                     if not any(str(v).strip() for v in new_row.values()):
                         st.warning("少なくとも1つのフィールドを入力してください。")
                     else:
@@ -1310,7 +1310,7 @@ def _render_sheet_editor(kojyo_name: str, sheets: dict):
 
             # ── ③ 行を削除 ───────────────────────────────
             if n > 0:
-                st.markdown("#### 🗑 行を削除")
+                st.markdown("#### 行を削除")
                 with st.container(border=True):
                     del_options = [_row_label(df, i) for i in range(n)]
                     del_sel = st.selectbox(
@@ -1320,7 +1320,7 @@ def _render_sheet_editor(kojyo_name: str, sheets: dict):
                     )
                     del_idx = del_options.index(del_sel)
                     st.caption(f"↳ {del_idx + 1}行目を削除します")
-                    if st.button("🗑 削除する", key=f"del_btn_{kojyo_name}_{sk}"):
+                    if st.button("削除する", key=f"del_btn_{kojyo_name}_{sk}"):
                         new_df = df.drop(df.index[del_idx]).reset_index(drop=True)
                         sheets[sk] = new_df
                         st.session_state.project_sheets = sheets
@@ -1335,7 +1335,7 @@ def _render_project_mgmt():
     # ── ヘッダーカード（使い方ページと同じ構造）──────────
     st.markdown(
         '<div class="page-card">'
-        '<div class="page-card-title">📁 プロジェクト管理</div>'
+        '<div class="page-card-title">プロジェクト管理</div>'
         '<div class="page-card-sub">工事ごとのExcelデータを保存・編集できます</div>'
         '</div>',
         unsafe_allow_html=True,
@@ -1343,7 +1343,7 @@ def _render_project_mgmt():
 
     # ── Supabase接続状態 ──────────────────────────────────
     if db.is_available():
-        st.caption("☁ Supabase 接続済み：編集内容は自動保存されます。")
+        st.caption("Supabase 接続済み：編集内容は自動保存されます。")
     else:
         try:
             _url = st.secrets["supabase"]["url"]
@@ -1384,7 +1384,7 @@ def _render_project_mgmt():
                             label_visibility="collapsed",
                         )
                     with rc2:
-                        if st.button("✅", key=f"pm_rename_ok_{pname}", help="確定"):
+                        if st.button("確定", key=f"pm_rename_ok_{pname}"):
                             new_name = new_name.strip()
                             if new_name and new_name != pname:
                                 if db.is_available():
@@ -1395,7 +1395,7 @@ def _render_project_mgmt():
                             st.session_state.pm_renaming = None
                             st.rerun()
                     with rc3:
-                        if st.button("✕", key=f"pm_rename_cancel_{pname}", help="キャンセル"):
+                        if st.button("×", key=f"pm_rename_cancel_{pname}"):
                             st.session_state.pm_renaming = None
                             st.rerun()
                 else:
@@ -1417,17 +1417,17 @@ def _render_project_mgmt():
                                     st.warning(f"「{pname}」のデータが見つかりません。")
                             st.rerun()
                     with row_cols[1]:
-                        if st.button("✏️", key=f"pm_rename_{pname}", help="名前を変更"):
+                        if st.button("変更", key=f"pm_rename_{pname}"):
                             st.session_state.pm_renaming = pname
                             st.rerun()
                     with row_cols[2]:
-                        if db.is_available():
-                            if st.button("🗑", key=f"pm_del_{pname}", help="削除"):
+                        if st.button("削除", key=f"pm_del_{pname}"):
+                            if db.is_available():
                                 db.delete_project(pname)
-                                if editing_name == pname:
-                                    st.session_state.pm_editing = None
-                                st.toast(f"「{pname}」を削除しました")
-                                st.rerun()
+                            if editing_name == pname:
+                                st.session_state.pm_editing = None
+                            st.toast(f"「{pname}」を削除しました")
+                            st.rerun()
 
     # ── 選択中プロジェクトの編集UI ───────────────────────
     if editing_name and editing_sheets is not None:
@@ -1543,7 +1543,7 @@ def _render_output():
                 st.session_state.pm_editing = proj_name
                 if db.is_available():
                     db.save_project(proj_name, dfs)
-                st.success("生成完了！ダウンロードボタンからファイルを取得してください。「📁 プロジェクト管理」で内容を編集できます。")
+                st.success("生成完了！ダウンロードボタンからファイルを取得してください。「プロジェクト管理」で内容を編集できます。")
                 st.rerun()
             except Exception:
                 st.error("生成エラー")
@@ -1552,7 +1552,7 @@ def _render_output():
     with col_dl:
         if st.session_state.excel_cache:
             st.download_button(
-                "⬇  ダウンロード",
+                "↓ ダウンロード",
                 data=st.session_state.excel_cache,
                 file_name=st.session_state.excel_fname,
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
