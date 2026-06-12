@@ -480,7 +480,9 @@ with st.sidebar:
     # ─ その他ナビ ────────────────────────────────────────────
     st.markdown("### TOOLS")
     if st.button("プロジェクト管理", use_container_width=True,
-                 type="primary" if page=="project_mgmt" else "secondary", key="nav_proj"):
+                 type="primary" if page in ("project_mgmt", "project_edit") else "secondary", key="nav_proj"):
+        st.session_state.pm_editing = None
+        st.session_state.pm_renaming = None
         st.session_state.page = "project_mgmt"; st.rerun()
     if st.button("基準DB確認", use_container_width=True,
                  type="primary" if page=="db_view" else "secondary", key="nav_db"):
@@ -1371,12 +1373,11 @@ def _render_project_mgmt():
         else:
             renaming = st.session_state.get("pm_renaming")
             for pname in proj_list:
-                is_active = (editing_name == pname)
                 is_renaming = (renaming == pname)
 
                 if is_renaming:
                     # ── リネーム入力行 ──────────────────────
-                    rc1, rc2, rc3 = st.columns([5, 1, 1])
+                    rc1, rc2, rc3 = st.columns([4, 3, 3])
                     with rc1:
                         new_name = st.text_input(
                             "新しい名前", value=pname,
@@ -1384,55 +1385,76 @@ def _render_project_mgmt():
                             label_visibility="collapsed",
                         )
                     with rc2:
-                        if st.button("確定", key=f"pm_rename_ok_{pname}"):
+                        if st.button("確定", key=f"pm_rename_ok_{pname}",
+                                     use_container_width=True):
                             new_name = new_name.strip()
                             if new_name and new_name != pname:
                                 if db.is_available():
                                     db.rename_project(pname, new_name)
-                                if editing_name == pname:
-                                    st.session_state.pm_editing = new_name
                                 st.toast(f"「{new_name}」に変更しました")
                             st.session_state.pm_renaming = None
                             st.rerun()
                     with rc3:
-                        if st.button("×", key=f"pm_rename_cancel_{pname}"):
+                        if st.button("キャンセル", key=f"pm_rename_cancel_{pname}",
+                                     use_container_width=True):
                             st.session_state.pm_renaming = None
                             st.rerun()
                 else:
                     # ── 通常行 ─────────────────────────────
-                    row_cols = st.columns([6, 1, 1])
+                    row_cols = st.columns([4, 3, 3])
                     with row_cols[0]:
-                        label = f"**▶ {pname}**" if is_active else pname
-                        if st.button(label, key=f"pm_open_{pname}", use_container_width=True):
-                            if is_active:
-                                st.session_state.pm_editing = None
+                        if st.button(pname, key=f"pm_open_{pname}", use_container_width=True):
+                            loaded = db.load_project(pname) if db.is_available() else None
+                            if loaded:
+                                st.session_state.project_sheets = loaded
+                                st.session_state.pm_editing = pname
+                            elif pname == current_name and current_sheets is not None:
+                                st.session_state.pm_editing = pname
+                                st.session_state.project_sheets = current_sheets
                             else:
-                                loaded = db.load_project(pname) if db.is_available() else None
-                                if loaded:
-                                    st.session_state.project_sheets = loaded
-                                    st.session_state.pm_editing = pname
-                                elif pname == current_name and current_sheets is not None:
-                                    st.session_state.pm_editing = pname
-                                else:
-                                    st.warning(f"「{pname}」のデータが見つかりません。")
+                                st.warning(f"「{pname}」のデータが見つかりません。")
+                                st.rerun()
+                                st.stop()
+                            st.session_state.page = "project_edit"
                             st.rerun()
                     with row_cols[1]:
-                        if st.button("変更", key=f"pm_rename_{pname}"):
+                        if st.button("名前を変更", key=f"pm_rename_{pname}",
+                                     use_container_width=True):
                             st.session_state.pm_renaming = pname
                             st.rerun()
                     with row_cols[2]:
-                        if st.button("削除", key=f"pm_del_{pname}"):
+                        if st.button("削除", key=f"pm_del_{pname}",
+                                     use_container_width=True):
                             if db.is_available():
                                 db.delete_project(pname)
-                            if editing_name == pname:
-                                st.session_state.pm_editing = None
                             st.toast(f"「{pname}」を削除しました")
                             st.rerun()
 
-    # ── 選択中プロジェクトの編集UI ───────────────────────
-    if editing_name and editing_sheets is not None:
-        with st.container(border=True):
-            _render_sheet_editor(editing_name, editing_sheets)
+
+def _render_project_edit():
+    """プロジェクト編集ページ（プロジェクト管理から遷移）。"""
+    editing_name = st.session_state.get("pm_editing")
+    editing_sheets = st.session_state.get("project_sheets")
+
+    # ── ヘッダーカード ────────────────────────────────────
+    st.markdown(
+        f'<div class="page-card">'
+        f'<div class="page-card-title">{editing_name or ""}</div>'
+        f'<div class="page-card-sub">シートの編集・ダウンロード</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    if st.button("← プロジェクト一覧に戻る", key="proj_edit_back"):
+        st.session_state.page = "project_mgmt"
+        st.rerun()
+
+    if not editing_name or editing_sheets is None:
+        st.warning("プロジェクトが選択されていません。")
+        return
+
+    with st.container(border=True):
+        _render_sheet_editor(editing_name, editing_sheets)
 
 
 def _render_output():
@@ -1540,7 +1562,7 @@ def _render_output():
                 st.session_state.excel_fname = (f"施工管理計画_{safe}.xlsx" if safe
                                                 else "施工管理計画.xlsx")
                 st.session_state.project_sheets = dfs
-                st.session_state.pm_editing = proj_name
+                st.session_state.pm_editing = proj_name  # 編集ページ用に保持
                 if db.is_available():
                     db.save_project(proj_name, dfs)
                 st.success("生成完了！ダウンロードボタンからファイルを取得してください。「プロジェクト管理」で内容を編集できます。")
@@ -1991,6 +2013,8 @@ elif page == "db_view":
     _render_db_view()
 elif page == "project_mgmt":
     _render_project_mgmt()
+elif page == "project_edit":
+    _render_project_edit()
 elif page == "structure" and has_data:
     _render_structure()
 elif page in ("matching", "candidate") and has_data:
