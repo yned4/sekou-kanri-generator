@@ -257,8 +257,8 @@ hr{border-color:#E5E3DC!important;}
 # ===========================================================================
 # ステップ進捗バー
 # ===========================================================================
-_STEP_ORDER  = ["upload", "structure", "matching", "output", "excel_edit"]
-_STEP_LABELS = ["① 取込", "② 構造化", "③ マッチング", "④ 出力", "⑤ Excel編集"]
+_STEP_ORDER  = ["upload", "structure", "matching", "output"]
+_STEP_LABELS = ["① 取込", "② 構造化", "③ マッチング", "④ 出力"]
 
 
 def _render_step_bar(current_page: str) -> None:
@@ -338,6 +338,7 @@ if "page"            not in st.session_state: st.session_state["page"]          
 if "excel_cache"     not in st.session_state: st.session_state["excel_cache"]     = None
 if "excel_fname"     not in st.session_state: st.session_state["excel_fname"]     = None
 if "project_sheets"  not in st.session_state: st.session_state["project_sheets"]  = None
+if "pm_editing"      not in st.session_state: st.session_state["pm_editing"]      = None
 
 # ===========================================================================
 # ヘルパー
@@ -473,50 +474,19 @@ with st.sidebar:
                  type="primary" if page=="output" else "secondary",
                  disabled=not has_data, key="nav_output"):
         st.session_state.page = "output"; st.rerun()
-    has_sheets = st.session_state.get("project_sheets") is not None
-    if st.button("⑤ Excel編集", use_container_width=True,
-                 type="primary" if page=="excel_edit" else "secondary",
-                 disabled=not has_sheets, key="nav_excel_edit"):
-        st.session_state.page = "excel_edit"; st.rerun()
-
     st.divider()
 
     # ─ その他ナビ ────────────────────────────────────────────
     st.markdown("### TOOLS")
+    if st.button("📁 プロジェクト管理", use_container_width=True,
+                 type="primary" if page=="project_mgmt" else "secondary", key="nav_proj"):
+        st.session_state.page = "project_mgmt"; st.rerun()
     if st.button("基準DB確認", use_container_width=True,
                  type="primary" if page=="db_view" else "secondary", key="nav_db"):
         st.session_state.page = "db_view"; st.rerun()
-
     if st.button("使い方", use_container_width=True,
                  type="primary" if page=="help" else "secondary", key="nav_help"):
         st.session_state.page = "help"; st.rerun()
-
-    # ─ 保存済みプロジェクト ──────────────────────────────────
-    if db.is_available():
-        st.divider()
-        st.markdown("### 保存済みプロジェクト")
-        proj_list = db.list_projects()
-        if proj_list:
-            for pname in proj_list:
-                pc1, pc2 = st.columns([5, 1])
-                with pc1:
-                    if st.button(pname, key=f"proj_load_{pname}",
-                                 use_container_width=True,
-                                 help="クリックして読み込む"):
-                        loaded = db.load_project(pname)
-                        if loaded:
-                            st.session_state.project_sheets = loaded
-                            st.session_state.page = "excel_edit"
-                            st.toast(f"「{pname}」を読み込みました")
-                            st.rerun()
-                with pc2:
-                    if st.button("🗑", key=f"proj_del_{pname}",
-                                 help="削除"):
-                        db.delete_project(pname)
-                        st.toast(f"「{pname}」を削除しました")
-                        st.rerun()
-        else:
-            st.caption("保存済みプロジェクトはありません")
 
     st.divider()
 
@@ -537,6 +507,7 @@ with st.sidebar:
         st.session_state.confirmed_keys  = set()
         st.session_state.excel_cache = st.session_state.excel_fname = None
         st.session_state.project_sheets = None
+        st.session_state.pm_editing = None
         st.session_state.page = "upload"
         st.rerun()
 
@@ -1208,48 +1179,45 @@ def _render_custom_rows(工事名: str):
             st.caption("登録済みの手動行はありません")
 
 
-def _render_excel_edit():
-    """⑤ Excel編集ページ。生成済みExcelのシートをアプリ上で編集する。"""
-    _render_step_bar("excel_edit")
-
-    sheets = st.session_state.get("project_sheets")
-    if not sheets:
-        st.info("まず ④ 出力 ページでExcelを生成してください。")
-        return
-
-    si = st.session_state.get("suryo_info", {})
-    kojyo_name = si.get("工事名", "")
-
-    st.markdown('<div class="page-card">', unsafe_allow_html=True)
-    st.markdown("## ⑤ Excel編集")
-    st.caption("生成済みExcelの各シートを確認・編集できます。行の挿入・削除後は「Excelを再生成」でダウンロードしてください。")
-
-    if db.is_available():
-        st.success("☁ Supabase に接続済み：編集内容は自動保存されます。")
-    else:
-        st.warning("⚠ Supabase 未設定：編集内容はこのセッション中のみ保持されます。")
-
-    # ── 再生成ボタン ─────────────────────────────────────
+def _render_sheet_editor(kojyo_name: str, sheets: dict):
+    """指定プロジェクトのシート編集UI（3タブ）。"""
     safe = re.sub(r'[\\/:*?"<>|　 ]', '_', kojyo_name) if kojyo_name else "project"
-    if st.button("🔄 Excelを再生成・ダウンロード", type="primary", key="edit_regen"):
-        try:
-            with st.spinner("再生成中..."):
-                new_bytes = write_excel_from_dfs(
-                    df_d=sheets["出来形一覧"],
-                    df_h=sheets["品管一覧"],
-                    df_p=sheets["撮影箇所"],
-                )
-            st.session_state.excel_cache = new_bytes
-            fname = f"施工管理計画_{safe}.xlsx" if safe else "施工管理計画.xlsx"
-            st.session_state.excel_fname = fname
-            st.toast("再生成完了。④ 出力ページからダウンロードできます。")
-        except Exception:
-            st.error("再生成エラー")
-            with st.expander("詳細"): st.code(traceback.format_exc())
+
+    # ── ダウンロードボタン ────────────────────────────────
+    hcol, dcol = st.columns([3, 1])
+    with hcol:
+        st.markdown(f"### 📝 {kojyo_name}")
+    with dcol:
+        if st.button("🔄 Excelを生成・ダウンロード", type="primary", key="pm_regen"):
+            try:
+                with st.spinner("生成中..."):
+                    new_bytes = write_excel_from_dfs(
+                        df_d=sheets["出来形一覧"],
+                        df_h=sheets["品管一覧"],
+                        df_p=sheets["撮影箇所"],
+                    )
+                fname = f"施工管理計画_{safe}.xlsx" if safe else "施工管理計画.xlsx"
+                st.session_state.excel_cache = new_bytes
+                st.session_state.excel_fname = fname
+                st.toast("生成完了")
+                st.rerun()
+            except Exception:
+                st.error("生成エラー")
+                with st.expander("詳細"): st.code(traceback.format_exc())
+
+    # ダウンロードボタン（生成済みの場合）
+    if st.session_state.get("excel_cache") and st.session_state.get("excel_fname", "").startswith(f"施工管理計画_{safe}"):
+        st.download_button(
+            "⬇ ダウンロード",
+            data=st.session_state.excel_cache,
+            file_name=st.session_state.excel_fname,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="pm_dl",
+        )
 
     st.divider()
 
-    # ── シートタブ ───────────────────────────────────────
+    # ── シートタブ ────────────────────────────────────────
     sheet_keys = ["出来形一覧", "品管一覧", "撮影箇所"]
     tabs = st.tabs(sheet_keys)
 
@@ -1258,66 +1226,133 @@ def _render_excel_edit():
             df: pd.DataFrame = sheets[sk]
             n = len(df)
 
-            # 現在の内容を表示（行番号を先頭列に追加して表示）
             display_df = df.copy().reset_index(drop=True)
-            display_df.index = display_df.index + 1  # 1始まり
+            display_df.index = display_df.index + 1
             display_df.index.name = "行番号"
             st.dataframe(display_df, use_container_width=True)
 
             # ── 行を挿入 ─────────────────────────────────
-            st.markdown("#### 行を挿入")
-            ins_after = st.number_input(
-                f"何行目の後に挿入しますか？（0 = 先頭、{n} = 末尾）",
-                min_value=0, max_value=n, value=n, step=1,
-                key=f"ins_after_{sk}",
-            )
-            cols = list(df.columns)
-            new_row: dict = {}
-            pairs = [cols[i:i+2] for i in range(0, len(cols), 2)]
-            for pair in pairs:
-                wcols = st.columns(len(pair))
-                for wc, col in zip(wcols, pair):
-                    with wc:
-                        new_row[col] = st.text_input(col, key=f"ins_{sk}_{col}")
+            with st.expander("行を挿入", expanded=False):
+                ins_after = st.number_input(
+                    f"何行目の後に挿入？（0 = 先頭、{n} = 末尾）",
+                    min_value=0, max_value=n, value=n, step=1,
+                    key=f"ins_after_{kojyo_name}_{sk}",
+                )
+                cols = list(df.columns)
+                new_row: dict = {}
+                pairs = [cols[i:i+2] for i in range(0, len(cols), 2)]
+                for pair in pairs:
+                    wcols = st.columns(len(pair))
+                    for wc, col in zip(wcols, pair):
+                        with wc:
+                            new_row[col] = st.text_input(col, key=f"ins_{kojyo_name}_{sk}_{col}")
 
-            if st.button("挿入", key=f"ins_btn_{sk}", type="primary"):
-                if not any(str(v).strip() for v in new_row.values()):
-                    st.warning("少なくとも1つのフィールドを入力してください。")
-                else:
-                    new_df_row = pd.DataFrame([new_row])
-                    pos = int(ins_after)
-                    if pos <= 0:
-                        new_df = pd.concat([new_df_row, df], ignore_index=True)
-                    elif pos >= len(df):
-                        new_df = pd.concat([df, new_df_row], ignore_index=True)
+                if st.button("挿入", key=f"ins_btn_{kojyo_name}_{sk}", type="primary"):
+                    if not any(str(v).strip() for v in new_row.values()):
+                        st.warning("少なくとも1つのフィールドを入力してください。")
                     else:
-                        new_df = pd.concat(
-                            [df.iloc[:pos], new_df_row, df.iloc[pos:]],
-                            ignore_index=True,
-                        )
-                    sheets[sk] = new_df
-                    st.session_state.project_sheets = sheets
-                    if db.is_available():
-                        db.save_project(kojyo_name, sheets)
-                    st.toast(f"{pos + 1} 行目に挿入しました")
-                    st.rerun()
+                        new_df_row = pd.DataFrame([new_row])
+                        pos = int(ins_after)
+                        if pos <= 0:
+                            new_df = pd.concat([new_df_row, df], ignore_index=True)
+                        elif pos >= len(df):
+                            new_df = pd.concat([df, new_df_row], ignore_index=True)
+                        else:
+                            new_df = pd.concat(
+                                [df.iloc[:pos], new_df_row, df.iloc[pos:]],
+                                ignore_index=True,
+                            )
+                        sheets[sk] = new_df
+                        st.session_state.project_sheets = sheets
+                        if db.is_available():
+                            db.save_project(kojyo_name, sheets)
+                        st.toast(f"{pos + 1} 行目に挿入しました")
+                        st.rerun()
 
             # ── 行を削除 ─────────────────────────────────
             if n > 0:
-                st.markdown("#### 行を削除")
-                del_idx = st.number_input(
-                    f"削除する行番号（1〜{n}）",
-                    min_value=1, max_value=n, value=1, step=1,
-                    key=f"del_idx_{sk}",
-                )
-                if st.button("削除", key=f"del_btn_{sk}"):
-                    new_df = df.drop(df.index[int(del_idx) - 1]).reset_index(drop=True)
-                    sheets[sk] = new_df
-                    st.session_state.project_sheets = sheets
-                    if db.is_available():
-                        db.save_project(kojyo_name, sheets)
-                    st.toast(f"{del_idx} 行目を削除しました")
+                with st.expander("行を削除", expanded=False):
+                    del_idx = st.number_input(
+                        f"削除する行番号（1〜{n}）",
+                        min_value=1, max_value=n, value=1, step=1,
+                        key=f"del_idx_{kojyo_name}_{sk}",
+                    )
+                    if st.button("削除", key=f"del_btn_{kojyo_name}_{sk}"):
+                        new_df = df.drop(df.index[int(del_idx) - 1]).reset_index(drop=True)
+                        sheets[sk] = new_df
+                        st.session_state.project_sheets = sheets
+                        if db.is_available():
+                            db.save_project(kojyo_name, sheets)
+                        st.toast(f"{del_idx} 行目を削除しました")
+                        st.rerun()
+
+
+def _render_project_mgmt():
+    """📁 プロジェクト管理ページ。"""
+    st.markdown('<div class="page-card">', unsafe_allow_html=True)
+    st.markdown("## 📁 プロジェクト管理")
+
+    if db.is_available():
+        st.caption("☁ Supabase 接続済み：編集内容は自動保存されます。")
+    else:
+        st.warning("⚠ Supabase 未設定：プロジェクトは保存されません。④ 出力 で生成した場合のみ編集できます。")
+
+    # ── プロジェクト選択 ─────────────────────────────────
+    # 現在編集中のプロジェクトがあれば先に表示
+    editing_name = st.session_state.get("pm_editing")
+    editing_sheets = st.session_state.get("project_sheets") if editing_name else None
+
+    proj_list = db.list_projects() if db.is_available() else []
+
+    # ④出力で生成済み・未保存のものを先頭に追加（Supabaseにない場合）
+    si = st.session_state.get("suryo_info") or {}
+    current_name = si.get("工事名", "")
+    current_sheets = st.session_state.get("project_sheets")
+    if current_name and current_sheets is not None and current_name not in proj_list:
+        proj_list = [current_name] + proj_list
+
+    if not proj_list:
+        st.info("保存済みプロジェクトがありません。④ 出力でExcelを生成すると自動的に保存されます。")
+        st.markdown('</div>', unsafe_allow_html=True)
+        return
+
+    # ── プロジェクト一覧 ──────────────────────────────────
+    st.markdown("### プロジェクト一覧")
+    for pname in proj_list:
+        is_active = (editing_name == pname)
+        row_cols = st.columns([5, 1, 1])
+        with row_cols[0]:
+            label = f"**{pname}**" if is_active else pname
+            if st.button(label, key=f"pm_open_{pname}", use_container_width=True):
+                if is_active:
+                    # 既に開いているので閉じる
+                    st.session_state.pm_editing = None
+                else:
+                    # Supabaseから読み込み（なければsession_stateの現在データ）
+                    loaded = db.load_project(pname) if db.is_available() else None
+                    if loaded:
+                        st.session_state.project_sheets = loaded
+                        st.session_state.pm_editing = pname
+                    elif pname == current_name and current_sheets is not None:
+                        st.session_state.pm_editing = pname
+                    else:
+                        st.warning(f"「{pname}」のデータが見つかりません。")
+                st.rerun()
+        with row_cols[1]:
+            st.caption("編集中" if is_active else "")
+        with row_cols[2]:
+            if db.is_available():
+                if st.button("🗑", key=f"pm_del_{pname}", help="削除"):
+                    db.delete_project(pname)
+                    if editing_name == pname:
+                        st.session_state.pm_editing = None
+                    st.toast(f"「{pname}」を削除しました")
                     st.rerun()
+
+    # ── 選択中プロジェクトの編集UI ───────────────────────
+    if editing_name and editing_sheets is not None:
+        st.divider()
+        _render_sheet_editor(editing_name, editing_sheets)
 
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -1417,9 +1452,10 @@ def _render_output():
                 st.session_state.excel_fname = (f"施工管理計画_{safe}.xlsx" if safe
                                                 else "施工管理計画.xlsx")
                 st.session_state.project_sheets = dfs
+                st.session_state.pm_editing = si["工事名"]
                 if db.is_available():
                     db.save_project(si["工事名"], dfs)
-                st.success("生成完了！ダウンロードボタンからファイルを取得してください。⑤ Excel編集 で内容を編集できます。")
+                st.success("生成完了！ダウンロードボタンからファイルを取得してください。「📁 プロジェクト管理」で内容を編集できます。")
                 st.rerun()
             except Exception:
                 st.error("生成エラー")
@@ -1865,8 +1901,8 @@ if page == "help":
     _render_help()
 elif page == "db_view":
     _render_db_view()
-elif page == "excel_edit" and st.session_state.get("project_sheets") is not None:
-    _render_excel_edit()
+elif page == "project_mgmt":
+    _render_project_mgmt()
 elif page == "structure" and has_data:
     _render_structure()
 elif page in ("matching", "candidate") and has_data:
