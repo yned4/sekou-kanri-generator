@@ -339,6 +339,7 @@ if "excel_cache"     not in st.session_state: st.session_state["excel_cache"]   
 if "excel_fname"     not in st.session_state: st.session_state["excel_fname"]     = None
 if "project_sheets"  not in st.session_state: st.session_state["project_sheets"]  = None
 if "pm_editing"      not in st.session_state: st.session_state["pm_editing"]      = None
+if "pm_renaming"     not in st.session_state: st.session_state["pm_renaming"]     = None
 
 # ===========================================================================
 # ヘルパー
@@ -1374,34 +1375,67 @@ def _render_project_mgmt():
         if not proj_list:
             st.info("保存済みプロジェクトがありません。④ 出力でExcelを生成すると自動的に保存されます。")
         else:
+            renaming = st.session_state.get("pm_renaming")
             for pname in proj_list:
                 is_active = (editing_name == pname)
-                row_cols = st.columns([5, 1, 1])
-                with row_cols[0]:
-                    label = f"**{pname}**" if is_active else pname
-                    if st.button(label, key=f"pm_open_{pname}", use_container_width=True):
-                        if is_active:
-                            st.session_state.pm_editing = None
-                        else:
-                            loaded = db.load_project(pname) if db.is_available() else None
-                            if loaded:
-                                st.session_state.project_sheets = loaded
-                                st.session_state.pm_editing = pname
-                            elif pname == current_name and current_sheets is not None:
-                                st.session_state.pm_editing = pname
-                            else:
-                                st.warning(f"「{pname}」のデータが見つかりません。")
-                        st.rerun()
-                with row_cols[1]:
-                    st.caption("▶ 編集中" if is_active else "")
-                with row_cols[2]:
-                    if db.is_available():
-                        if st.button("🗑", key=f"pm_del_{pname}", help="削除"):
-                            db.delete_project(pname)
-                            if editing_name == pname:
-                                st.session_state.pm_editing = None
-                            st.toast(f"「{pname}」を削除しました")
+                is_renaming = (renaming == pname)
+
+                if is_renaming:
+                    # ── リネーム入力行 ──────────────────────
+                    rc1, rc2, rc3 = st.columns([5, 1, 1])
+                    with rc1:
+                        new_name = st.text_input(
+                            "新しい名前", value=pname,
+                            key=f"pm_rename_input_{pname}",
+                            label_visibility="collapsed",
+                        )
+                    with rc2:
+                        if st.button("✅", key=f"pm_rename_ok_{pname}", help="確定"):
+                            new_name = new_name.strip()
+                            if new_name and new_name != pname:
+                                if db.is_available():
+                                    db.rename_project(pname, new_name)
+                                if editing_name == pname:
+                                    st.session_state.pm_editing = new_name
+                                st.toast(f"「{new_name}」に変更しました")
+                            st.session_state.pm_renaming = None
                             st.rerun()
+                    with rc3:
+                        if st.button("✕", key=f"pm_rename_cancel_{pname}", help="キャンセル"):
+                            st.session_state.pm_renaming = None
+                            st.rerun()
+                else:
+                    # ── 通常行 ─────────────────────────────
+                    row_cols = st.columns([5, 1, 1, 1])
+                    with row_cols[0]:
+                        label = f"**▶ {pname}**" if is_active else pname
+                        if st.button(label, key=f"pm_open_{pname}", use_container_width=True):
+                            if is_active:
+                                st.session_state.pm_editing = None
+                            else:
+                                loaded = db.load_project(pname) if db.is_available() else None
+                                if loaded:
+                                    st.session_state.project_sheets = loaded
+                                    st.session_state.pm_editing = pname
+                                elif pname == current_name and current_sheets is not None:
+                                    st.session_state.pm_editing = pname
+                                else:
+                                    st.warning(f"「{pname}」のデータが見つかりません。")
+                            st.rerun()
+                    with row_cols[1]:
+                        if st.button("✏️", key=f"pm_rename_{pname}", help="名前を変更"):
+                            st.session_state.pm_renaming = pname
+                            st.rerun()
+                    with row_cols[2]:
+                        st.write("")  # spacer
+                    with row_cols[3]:
+                        if db.is_available():
+                            if st.button("🗑", key=f"pm_del_{pname}", help="削除"):
+                                db.delete_project(pname)
+                                if editing_name == pname:
+                                    st.session_state.pm_editing = None
+                                st.toast(f"「{pname}」を削除しました")
+                                st.rerun()
 
     # ── 選択中プロジェクトの編集UI ───────────────────────
     if editing_name and editing_sheets is not None:
@@ -1473,6 +1507,15 @@ def _render_output():
     # ── 手動行の追加・管理 ─────────────────────────────────────
     _render_custom_rows(si.get("工事名", ""))
 
+    # ── プロジェクト名（保存用） ──────────────────────────────
+    st.text_input(
+        "プロジェクト名（保存・管理タブでの表示名）",
+        value=si.get("工事名", ""),
+        key="output_proj_name",
+        placeholder="例: ○○工事 R6年度",
+        help="自由に変更できます。この名前でプロジェクト管理タブに保存されます。",
+    )
+
     # ── ボタン ───────────────────────────────────────────────
     col_out, col_dl, _ = st.columns([2, 1, 1])
     with col_out:
@@ -1499,14 +1542,15 @@ def _render_output():
                         custom_rows=_get_custom_rows(),
                         return_dfs=True,
                     )
-                safe = re.sub(r'[\\/:*?"<>|　 ]', '_', si["工事名"])
+                proj_name = (st.session_state.get("output_proj_name") or si["工事名"]).strip()
+                safe = re.sub(r'[\\/:*?"<>|　 ]', '_', proj_name)
                 st.session_state.excel_cache = excel_bytes
                 st.session_state.excel_fname = (f"施工管理計画_{safe}.xlsx" if safe
                                                 else "施工管理計画.xlsx")
                 st.session_state.project_sheets = dfs
-                st.session_state.pm_editing = si["工事名"]
+                st.session_state.pm_editing = proj_name
                 if db.is_available():
-                    db.save_project(si["工事名"], dfs)
+                    db.save_project(proj_name, dfs)
                 st.success("生成完了！ダウンロードボタンからファイルを取得してください。「📁 プロジェクト管理」で内容を編集できます。")
                 st.rerun()
             except Exception:

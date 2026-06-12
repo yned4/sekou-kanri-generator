@@ -116,3 +116,15 @@ def delete_project(kojyo_name: str) -> None:
     if client is None:
         return
     client.table("projects").delete().eq("kojyo_name", kojyo_name).execute()
+
+
+def rename_project(old_name: str, new_name: str) -> bool:
+    """プロジェクト名を変更する。成功したら True を返す。"""
+    if old_name == new_name or not new_name.strip():
+        return False
+    sheets = load_project(old_name)
+    if sheets is None:
+        return False
+    save_project(new_name, sheets)
+    delete_project(old_name)
+    return True
