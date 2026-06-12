@@ -557,12 +557,26 @@ def _render_upload():
                         f.write(uploaded.read()); path_tmp = f.name
                     with st.spinner("PDF解析・マッチング中..."):
                         si = extract_suryo(path_tmp)
-                        dm = build_match_detail(
-                            si["工種階層"],
-                            kojyo_data["出来形管理"],
-                            kojyo_data["品質管理"],
-                            kojyo_data["撮影箇所"],
+
+                    # フォントエンコーディング問題の検出
+                    if not si.get("pdf_text_readable", True):
+                        st.error(
+                            "このPDFのテキストを正常に読み取れませんでした。\n\n"
+                            "**原因**: PDFのフォントに文字コードマッピング（ToUnicode CMap）が含まれていないため、"
+                            "日本語テキストの抽出ができません。\n\n"
+                            "**対処法**: \n"
+                            "- PDF を一度 Adobe Acrobat などで開き、「名前を付けて保存」で再出力してください\n"
+                            "- または、Wordや表計算ソフトから直接PDFエクスポートしたファイルをご使用ください\n"
+                            "- スキャンPDFの場合はOCR処理済みのものをご使用ください"
                         )
+                        return
+
+                    dm = build_match_detail(
+                        si["工種階層"],
+                        kojyo_data["出来形管理"],
+                        kojyo_data["品質管理"],
+                        kojyo_data["撮影箇所"],
+                    )
                     for k in list(st.session_state.keys()):
                         if k.startswith(("chk_d_","chk_h_","chk_p_")):
                             del st.session_state[k]

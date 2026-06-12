@@ -475,12 +475,16 @@ def extract_from_pdf(施工管理基準_path: str,
 # 数量総括表 抽出
 # ---------------------------------------------------------------------------
 
-# 数量総括表の列数（ページによって22か23列）
-SURYO_VALID_COL_COUNTS = {22, 23}
-SURYO_KOJYO_COL_IDX    = 1   # 工種名が入る列インデックス
+# 数量総括表の列数（ページによって異なる）
+# 22/23列: 国交省標準フォーマット（工種はcol[1]）
+# 13列: 一部地方整備局フォーマット（工種はcol[0]）
+SURYO_VALID_COL_COUNTS = {13, 22, 23}
+SURYO_KOJYO_COL_IDX    = 1   # 22/23列フォーマットの工種列（デフォルト）
+_SURYO_KOJYO_COL_MAP   = {13: 0, 22: 1, 23: 1}  # 列数→工種列インデックス
 _SURYO_COL_CONFIG      = {
     23: {"規格": 5, "単位": 9,  "数量": 14},
     22: {"規格": 5, "単位": 8,  "数量": 13},
+    13: {"規格": 4, "単位": 5,  "数量": 8},
 }
 
 # コスト集計項目（工種ではない）- 国交省基準との照合対象外
@@ -545,21 +549,27 @@ def extract_suryo(pdf_path: str) -> dict:
     工事名 = ""
     all_records: list = []
     excluded_records: list = []
+    _all_extracted_text: list[str] = []  # 日本語文字化け検出用
 
     with pdfplumber.open(pdf_path) as pdf:
         # ── 工事名抽出 ──────────────────────────────────────
-        p1_text = pdf.pages[0].extract_text() or ""
-        for line in p1_text.split("\n"):
-            line    = line.strip()
-            compact = re.sub(r"\s", "", line)
-            # スペースを詰めた形で「令和」「工事」を含み「工事名」ラベルではない行
-            if "令和" in compact and "工事" in compact and "工事名" not in compact:
-                工事名 = re.sub(r"\s+", " ", line).strip()
+        # 全ページのテキストから探す（表紙なしPDFに対応）
+        for page in pdf.pages[:4]:
+            page_text = page.extract_text() or ""
+            _all_extracted_text.append(page_text)
+            for line in page_text.split("\n"):
+                line    = line.strip()
+                compact = re.sub(r"\s", "", line)
+                # スペースを詰めた形で「令和」「工事」を含み「工事名」ラベルではない行
+                if "令和" in compact and "工事" in compact and "工事名" not in compact:
+                    工事名 = re.sub(r"\s+", " ", line).strip()
+                    break
+            if 工事名:
                 break
 
-        # p1 で取れなければテーブルヘッダー行から取得（p2〜）
+        # テキストから取れなければテーブルヘッダー行から取得
         if not 工事名:
-            for page in pdf.pages[1:3]:
+            for page in pdf.pages[:4]:
                 for table in page.extract_tables():
                     if not table or len(table[0]) not in SURYO_VALID_COL_COUNTS:
                         continue
@@ -575,18 +585,21 @@ def extract_suryo(pdf_path: str) -> dict:
                     break
 
         # ── 全ページから工種を階層付きで収集 ─────────────────
-        for page in pdf.pages[1:]:
+        # page[0] から処理（表紙なしPDFに対応）
+        for page in pdf.pages:
             tables = page.extract_tables()
             valid  = [t for t in tables if t and len(t[0]) in SURYO_VALID_COL_COUNTS]
             if not valid:
                 continue
 
-            text_to_x0 = _build_suryo_x0_map(page)
+            n_cols      = len(valid[0][0])
+            kojyo_col   = _SURYO_KOJYO_COL_MAP.get(n_cols, SURYO_KOJYO_COL_IDX)
+            text_to_x0  = _build_suryo_x0_map(page)
 
             for row in valid[0][2:]:   # 先頭2行はヘッダー
-                if len(row) <= SURYO_KOJYO_COL_IDX:
+                if len(row) <= kojyo_col:
                     continue
-                val = _clean(row[SURYO_KOJYO_COL_IDX])
+                val = _clean(row[kojyo_col])
                 if not val:
                     continue
                 if val.startswith("(") or val.startswith("（"):
@@ -644,11 +657,24 @@ def extract_suryo(pdf_path: str) -> dict:
     df_excluded = pd.DataFrame(excluded_records, columns=["項目名", "除外理由"]) \
         if excluded_records else pd.DataFrame(columns=["項目名", "除外理由"])
 
+    # ── 日本語文字化け検出 ────────────────────────────────────
+    # テキストが抽出されているのに CJK 文字が1文字もない場合はフォントエンコーディング問題
+    def _has_cjk(text: str) -> bool:
+        import unicodedata as _ud
+        return any(
+            'CJK' in _ud.name(c, '') or 'HIRAGANA' in _ud.name(c, '') or 'KATAKANA' in _ud.name(c, '')
+            for c in text
+        )
+
+    combined_text = " ".join(_all_extracted_text)
+    pdf_text_readable = (not combined_text.strip()) or _has_cjk(combined_text)
+
     return {
-        "工事名":    工事名,
-        "工種リスト": sorted(kojyo_set),
-        "工種階層":   df_hierarchy,
-        "除外行":     df_excluded,
+        "工事名":          工事名,
+        "工種リスト":       sorted(kojyo_set),
+        "工種階層":         df_hierarchy,
+        "除外行":           df_excluded,
+        "pdf_text_readable": pdf_text_readable,  # Falseならフォントエンコーディング問題
     }
 
 
@@ -668,10 +694,11 @@ def get_unique_kojyo(data: dict) -> dict:
 
 
 def _normalize(s: str) -> str:
-    """マッチング用の正規化: スペース・括弧・記号を除去して小文字化。"""
+    """マッチング用の正規化: NFKC変換（半角カナ→全角等）+ スペース・括弧・記号を除去して小文字化。"""
     if not s:
         return ""
-    s = str(s)
+    import unicodedata as _ud
+    s = _ud.normalize("NFKC", str(s))                  # 半角カナ→全角、全角英数→半角など
     s = re.sub(r"\s+", "", s)                          # 全空白除去
     s = re.sub(r"[（）()【】\[\]「」『』]", "", s)   # 括弧除去
     s = re.sub(r"[・･]", "", s)                        # 中点除去
@@ -940,6 +967,68 @@ def _expand_photo_rows(
     return "\n".join(labels)
 
 
+# ---------------------------------------------------------------------------
+# 間接トリガーによる品質管理暗黙マッピング
+# ---------------------------------------------------------------------------
+
+# 数量総括表の細別/種別 に部分一致するキーワードが含まれていたら
+# 対応する品質管理工種を追加する（NFKC正規化後に照合）
+_IMPLICIT_HINSHITSU_RULES: list[tuple[list[str], list[str]]] = [
+    # トリガーキーワードリスト, 追加する品質管理DB工種リスト
+    (
+        # 現場打ちコンクリートを使う工種 → セメント・コンクリート
+        ["場所打擁壁工", "側溝工", "集水桝工", "集水桝", "函渠工", "カルバート工",
+         "現場打", "ボックスカルバート", "プレキャストカルバート工"],
+        ["セメント・コンクリート"],
+    ),
+    (
+        # プレキャスト製品を使う工種 → プレキャストコンクリート製品
+        ["プレキャスト", "カルバート工", "ボックスカルバート", "ヒューム管", "ＰＣ管"],
+        [
+            "プレキャストコンクリート製品 (JIS I類）",
+            "プレキャストコンクリート製品 (JIS Ⅱ類）",
+            "プレキャストコンクリート製品（その他）",
+        ],
+    ),
+]
+
+
+def _get_implicit_hinshitsu(suryo_df: pd.DataFrame, db_hinshitsu_df: pd.DataFrame) -> list[str]:
+    """
+    数量総括表の全キーワードを走査し、間接トリガーで追加すべき品質管理工種を返す。
+
+    例: 数量総括表に「カルバート工」があれば「セメント・コンクリート」と
+    「プレキャストコンクリート製品」を追加する。
+
+    Returns:
+        追加すべき品質管理工種名のリスト（DB内に存在するもののみ）
+    """
+    db_hinshitsu_set = set(db_hinshitsu_df["工種"].unique())
+
+    # 数量総括表の全ユニーク値を正規化してセットに集める
+    all_suryo_norm: set[str] = set()
+    for col in SURYO_LEVEL_COLS:
+        for v in suryo_df[col].unique():
+            n = _normalize(str(v or ""))
+            if len(n) >= 2:
+                all_suryo_norm.add(n)
+
+    result: list[str] = []
+    for triggers, targets in _IMPLICIT_HINSHITSU_RULES:
+        # トリガーのいずれかが数量総括表に含まれていれば
+        hit = any(
+            _normalize(t) in sv or sv in _normalize(t)
+            for t in triggers
+            for sv in all_suryo_norm
+            if len(_normalize(t)) >= 2
+        )
+        if hit:
+            for tgt in targets:
+                if tgt in db_hinshitsu_set and tgt not in result:
+                    result.append(tgt)
+    return result
+
+
 def build_match_detail(
     suryo_df: pd.DataFrame,
     db_dekigata_df: pd.DataFrame,
@@ -969,21 +1058,37 @@ def build_match_detail(
     norm_d = [(k, _normalize(k)) for k in db_dekigata_df["工種"].unique()  if len(_normalize(k)) >= 2]
     norm_h = [(k, _normalize(k)) for k in db_hinshitsu_df["工種"].unique() if len(_normalize(k)) >= 2]
 
+    # 間接トリガーで追加すべき品質管理工種（プロジェクト全体レベル）
+    implicit_h = _get_implicit_hinshitsu(suryo_df, db_hinshitsu_df)
+
     records = []
     chains = suryo_df[SURYO_LEVEL_COLS].drop_duplicates()
+
+    # 間接品管を追加する行を判定するためのキー（種別・細別が空の行 = 工種ルート行）
+    # 種別が空の最初の工種行（道路改良など）に付与する
+    implicit_added = False
 
     for _, chain in chains.iterrows():
         cd = chain.to_dict()
         md, _ = _match_chain(cd, norm_d)
         mh, _ = _match_chain(cd, norm_h)
-        photo_match = _expand_photo_rows(md, mh, db_photo_df) if db_photo_df is not None else ""
+
+        # 間接品管をまだ追加していない場合、直接マッチが空の種別ルート行に付与
+        extra_h = []
+        if implicit_h and not implicit_added and not cd.get("種別", ""):
+            extra_h = [k for k in implicit_h if k not in mh]
+            if extra_h:
+                implicit_added = True
+
+        all_mh = mh + extra_h
+        photo_match = _expand_photo_rows(md, all_mh, db_photo_df) if db_photo_df is not None else ""
         records.append({
             "工種":          cd.get("工種", ""),
             "種別":          cd.get("種別", ""),
             "細別":          cd.get("細別", ""),
             "名称":          cd.get("名称", ""),
             "出来形マッチ":   _expand_to_rows(md, db_dekigata_df, ["測定項目"]),
-            "品質管理マッチ": _expand_hinshitsu_rows(mh, db_hinshitsu_df),
+            "品質管理マッチ": _expand_hinshitsu_rows(all_mh, db_hinshitsu_df),
             "撮影箇所マッチ": photo_match,
         })
 
