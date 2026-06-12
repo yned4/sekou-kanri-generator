@@ -1192,37 +1192,31 @@ def _row_label(df: pd.DataFrame, i: int) -> str:
 def _render_sheet_editor(kojyo_name: str, sheets: dict):
     """指定プロジェクトのシート編集UI（3タブ）。"""
     safe = re.sub(r'[\\/:*?"<>|　 ]', '_', kojyo_name) if kojyo_name else "project"
+    fname = f"施工管理計画_{safe}.xlsx" if safe else "施工管理計画.xlsx"
 
-    # ── ヘッダー & ダウンロード ───────────────────────────
+    # ── ヘッダー & ダウンロード（1ボタン） ───────────────
     hcol, dcol = st.columns([3, 1])
     with hcol:
         st.markdown(f"### 📝 {kojyo_name}")
     with dcol:
-        if st.button("🔄 Excelを生成", type="primary", key="pm_regen"):
-            try:
-                with st.spinner("生成中..."):
-                    new_bytes = write_excel_from_dfs(
-                        df_d=sheets["出来形一覧"],
-                        df_h=sheets["品管一覧"],
-                        df_p=sheets["撮影箇所"],
-                    )
-                fname = f"施工管理計画_{safe}.xlsx" if safe else "施工管理計画.xlsx"
-                st.session_state.excel_cache = new_bytes
-                st.session_state.excel_fname = fname
-                st.toast("生成完了")
-                st.rerun()
-            except Exception:
-                st.error("生成エラー")
-                with st.expander("詳細"): st.code(traceback.format_exc())
-
-    if st.session_state.get("excel_cache") and st.session_state.get("excel_fname", "").startswith(f"施工管理計画_{safe}"):
-        st.download_button(
-            "⬇ ダウンロード",
-            data=st.session_state.excel_cache,
-            file_name=st.session_state.excel_fname,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key="pm_dl",
-        )
+        try:
+            excel_bytes = write_excel_from_dfs(
+                df_d=sheets["出来形一覧"],
+                df_h=sheets["品管一覧"],
+                df_p=sheets["撮影箇所"],
+            )
+            st.download_button(
+                "⬇ Excelをダウンロード",
+                data=excel_bytes,
+                file_name=fname,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                type="primary",
+                use_container_width=True,
+                key="pm_dl",
+            )
+        except Exception:
+            st.error("生成エラー")
+            with st.expander("詳細"): st.code(traceback.format_exc())
 
     st.divider()
 
@@ -1406,7 +1400,7 @@ def _render_project_mgmt():
                             st.rerun()
                 else:
                     # ── 通常行 ─────────────────────────────
-                    row_cols = st.columns([5, 1, 1, 1])
+                    row_cols = st.columns([6, 1, 1])
                     with row_cols[0]:
                         label = f"**▶ {pname}**" if is_active else pname
                         if st.button(label, key=f"pm_open_{pname}", use_container_width=True):
@@ -1427,8 +1421,6 @@ def _render_project_mgmt():
                             st.session_state.pm_renaming = pname
                             st.rerun()
                     with row_cols[2]:
-                        st.write("")  # spacer
-                    with row_cols[3]:
                         if db.is_available():
                             if st.button("🗑", key=f"pm_del_{pname}", help="削除"):
                                 db.delete_project(pname)
