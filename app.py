@@ -852,19 +852,39 @@ def _render_matching():
         else:
             saved = st.session_state.row_selections.get(ckey)
 
-            # 全解除フラグの処理（ウィジェット描画前に実行）
-            for _ck, _cat, _pfx, _n in [
-                ("d", "出来形",   "chk_d", len(items_d[:4])),
-                ("h", "品質管理", "chk_h", len(items_h)),
-                ("p", "撮影箇所", "chk_p", len(items_p)),
-            ]:
-                if st.session_state.pop(f"_desel_{_ck}_{sel_idx}", False):
-                    for _i in range(_n):
-                        st.session_state.pop(f"{_pfx}_{sel_idx}_{_i}", None)
-                    _base = st.session_state.row_selections.get(ckey) or \
-                            {"出来形": items_d, "品質管理": items_h, "撮影箇所": items_p}
-                    st.session_state.row_selections[ckey] = {**_base, _cat: []}
-            saved = st.session_state.row_selections.get(ckey)
+            # ── 全解除フラグの処理 & チェックボックスsession_state初期化
+            # （すべてのウィジェット描画より前に実行）
+            _desel_d = st.session_state.pop(f"_desel_d_{sel_idx}", False)
+            _desel_h = st.session_state.pop(f"_desel_h_{sel_idx}", False)
+            _desel_p = st.session_state.pop(f"_desel_p_{sel_idx}", False)
+
+            if _desel_d or _desel_h or _desel_p:
+                _base = st.session_state.row_selections.get(ckey) or \
+                        {"出来形": items_d, "品質管理": items_h, "撮影箇所": items_p}
+                _upd = {}
+                if _desel_d: _upd["出来形"]   = []
+                if _desel_h: _upd["品質管理"] = []
+                if _desel_p: _upd["撮影箇所"] = []
+                st.session_state.row_selections[ckey] = {**_base, **_upd}
+                saved = st.session_state.row_selections.get(ckey)
+
+            cur_d = saved.get("出来形",   items_d) if saved else items_d
+            cur_h = saved.get("品質管理", items_h) if saved else items_h
+            cur_p = saved.get("撮影箇所", items_p) if saved else items_p
+
+            # 全解除時は強制上書き、初回のみ初期化
+            for _i, _lbl in enumerate(items_d[:4]):
+                _k = f"chk_d_{sel_idx}_{_i}"
+                if _desel_d or _k not in st.session_state:
+                    st.session_state[_k] = _lbl in cur_d
+            for _i, _fl in enumerate(items_h):
+                _k = f"chk_h_{sel_idx}_{_i}"
+                if _desel_h or _k not in st.session_state:
+                    st.session_state[_k] = _fl in cur_h
+            for _i, _fl in enumerate(items_p):
+                _k = f"chk_p_{sel_idx}_{_i}"
+                if _desel_p or _k not in st.session_state:
+                    st.session_state[_k] = _fl in cur_p
 
             # 進捗＋ナビ（要選択行のみ）
             if cur_pos is not None and yo_idxs:
@@ -893,18 +913,12 @@ def _render_matching():
             if len(items_d) >= 2:
                 db_rows_d = [_lookup_db(lbl,"出来形管理") for lbl in items_d[:4]]
                 diff_d    = _diff_cols(db_rows_d, _DISP_D)
-                cur_d     = saved.get("出来形", items_d) if saved else items_d
-                # session_state にキーがなければ cur_d で初期化
-                for _i, _lbl in enumerate(items_d[:4]):
-                    _k = f"chk_d_{sel_idx}_{_i}"
-                    if _k not in st.session_state:
-                        st.session_state[_k] = _lbl in cur_d
                 cols_c    = st.columns(min(len(items_d),4))
                 for i,(col,lbl) in enumerate(zip(cols_c, items_d[:4])):
                     with col:
                         parts  = [p.strip() for p in lbl.split(" / ")]
                         ctitle = " / ".join(parts[1:]) if len(parts)>1 else parts[0]
-                        is_sel = st.session_state.get(f"chk_d_{sel_idx}_{i}", lbl in cur_d)
+                        is_sel = st.session_state.get(f"chk_d_{sel_idx}_{i}", False)
                         brd    = "border:1.5px solid #C01820;background:#FBEBEC;" if is_sel else ""
                         body   = _card_html(db_rows_d[i], _DISP_D, diff_d)
                         st.markdown(
@@ -958,11 +972,6 @@ def _render_matching():
                                 if st.button("全解除", key=f"desel_all_h_{sel_idx}", use_container_width=True):
                                     st.session_state[f"_desel_h_{sel_idx}"] = True
                                     st.rerun()
-                            cur_h = saved.get("品質管理", items_h) if saved else items_h
-                            for _i, _fl in enumerate(items_h):
-                                _k = f"chk_h_{sel_idx}_{_i}"
-                                if _k not in st.session_state:
-                                    st.session_state[_k] = _fl in cur_h
                             for kojyo,sub in _group_items(items_h).items():
                                 if len(_group_items(items_h))>1: st.caption(kojyo)
                                 for fl,dl in sub:
@@ -981,11 +990,6 @@ def _render_matching():
                                 if st.button("全解除", key=f"desel_all_p_{sel_idx}", use_container_width=True):
                                     st.session_state[f"_desel_p_{sel_idx}"] = True
                                     st.rerun()
-                            cur_p = saved.get("撮影箇所", items_p) if saved else items_p
-                            for _i, _fl in enumerate(items_p):
-                                _k = f"chk_p_{sel_idx}_{_i}"
-                                if _k not in st.session_state:
-                                    st.session_state[_k] = _fl in cur_p
                             for kojyo,sub in _group_items(items_p).items():
                                 if len(_group_items(items_p))>1: st.caption(kojyo)
                                 for fl,dl in sub:
