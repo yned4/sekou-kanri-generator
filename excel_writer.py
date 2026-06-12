@@ -411,11 +411,48 @@ def _reshape_photo(df: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+def _inject_custom_rows(df: pd.DataFrame, custom_rows: list, sheet_key: str) -> pd.DataFrame:
+    """
+    カスタム行をDataFrameの指定位置に挿入する。
+
+    after_kojyo == "末尾" → DataFrame末尾に追加
+    after_kojyo == "<工種名>" → その工種の最終行の直後に挿入（見つからなければ末尾）
+    """
+    target = [r for r in custom_rows if r.get("sheet") == sheet_key]
+    if not target or df.empty:
+        for row in target:
+            new_df = pd.DataFrame([{c: row.get("fields", {}).get(c, "") for c in df.columns}])
+            df = pd.concat([df, new_df], ignore_index=True)
+        return df
+
+    for row in target:
+        fields = row.get("fields", {})
+        new_row = {c: fields.get(c, "") for c in df.columns}
+        new_df = pd.DataFrame([new_row])
+
+        after = row.get("after_kojyo", "末尾")
+        if after != "末尾" and "工種" in df.columns:
+            mask = df["工種"].astype(str) == after
+            if mask.any():
+                insert_at = int(df[mask].index[-1]) + 1
+                # reset_index後のDataFrameでのloc位置
+                pos = df.index.get_loc(df.index[insert_at - 1]) + 1 if insert_at <= len(df) else len(df)
+                df = pd.concat(
+                    [df.iloc[:pos], new_df, df.iloc[pos:]],
+                    ignore_index=True,
+                )
+                continue
+        df = pd.concat([df, new_df], ignore_index=True)
+
+    return df
+
+
 def write_excel(
     data: dict,
     output_path: Optional[str] = None,
     工事名: str = "",
     dekigata_kojyo_map: dict = None,
+    custom_rows: Optional[list] = None,
 ) -> bytes:
     """
     抽出データをExcelに書き出す。
@@ -442,6 +479,11 @@ def write_excel(
     df_h = _reshape_hinshitsu(data["品質管理"])
     df_d = _reshape_dekigata(data["出来形管理"], kojyo_to_suryo=dekigata_kojyo_map)
     df_p = _reshape_photo(data["撮影箇所"])
+
+    if custom_rows:
+        df_h = _inject_custom_rows(df_h, custom_rows, "品管一覧")
+        df_d = _inject_custom_rows(df_d, custom_rows, "出来形一覧")
+        df_p = _inject_custom_rows(df_p, custom_rows, "撮影箇所")
 
     # ── 品管一覧 ──────────────────────────────────────────
     ws_h = wb.create_sheet(SHEET_HINSHITSU)

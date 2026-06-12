@@ -5,9 +5,11 @@ app.py
 起動: python3 -m streamlit run app.py
 """
 
+import json
 import re
 import tempfile
 import traceback
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
@@ -1044,6 +1046,110 @@ def _render_matching():
     st.markdown('</div>', unsafe_allow_html=True)
 
 
+# ===========================================================================
+# プロジェクト永続ストレージ（手動追加行）
+# ===========================================================================
+_PROJECT_DIR = Path("data/projects")
+
+def _proj_path(工事名: str) -> Path:
+    safe = re.sub(r'[\\/:*?"<>|　 ]', '_', 工事名)
+    return _PROJECT_DIR / f"{safe}.json"
+
+def _load_proj(工事名: str) -> dict:
+    p = _proj_path(工事名)
+    if p.exists():
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return {"custom_rows": []}
+
+def _save_proj(工事名: str, data: dict):
+    _PROJECT_DIR.mkdir(parents=True, exist_ok=True)
+    _proj_path(工事名).write_text(
+        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+# シートごとの列定義（出力Excelの列順と一致させる）
+_CUSTOM_SHEET_COLS = {
+    "出来形一覧": ["工種", "種別", "測定項目", "規格値_条件", "規格値", "社内規格値", "測定箇所", "備考"],
+    "品管一覧":   ["工種", "種別", "試験項目", "試験方法",   "規格値", "社内規格値", "試験基準", "備考"],
+    "撮影箇所":   ["区分", "工種", "撮影項目", "撮影時期",   "撮影頻度", "提出頻度",  "摘要"],
+}
+
+def _render_custom_rows(工事名: str):
+    """手動行の追加・管理UI（出力ページに埋め込む）"""
+    proj = _load_proj(工事名)
+    custom_rows = proj.get("custom_rows", [])
+
+    with st.expander("手動行の追加・管理", expanded=False):
+        # ── 追加フォーム ────────────────────────────────────────
+        sheet = st.selectbox("追加するシート", list(_CUSTOM_SHEET_COLS), key="cr_sheet")
+        cols_def = _CUSTOM_SHEET_COLS[sheet]
+
+        # 2列レイアウトでフィールド入力
+        row_data = {}
+        pairs = [cols_def[i:i+2] for i in range(0, len(cols_def), 2)]
+        for pair in pairs:
+            wcols = st.columns(len(pair))
+            for wc, col_name in zip(wcols, pair):
+                with wc:
+                    row_data[col_name] = st.text_input(col_name, key=f"cr_f_{col_name}")
+
+        # 挿入位置
+        pos_type = st.radio(
+            "挿入位置", ["末尾に追加", "指定した工種の後に挿入"],
+            horizontal=True, key="cr_pos_type",
+        )
+        after_kojyo = ""
+        if pos_type == "指定した工種の後に挿入":
+            after_kojyo = st.text_input(
+                "工種名（出力Excelの工種欄と同じ値を入力）", key="cr_after_kojyo",
+                placeholder="例: 舗装工",
+            )
+
+        if st.button("追加", key="cr_add", type="primary"):
+            if not any(v.strip() for v in row_data.values()):
+                st.warning("少なくとも1つのフィールドを入力してください。")
+            else:
+                custom_rows.append({
+                    "sheet": sheet,
+                    "after_kojyo": after_kojyo.strip() if pos_type == "指定した工種の後に挿入" else "末尾",
+                    "fields": row_data,
+                })
+                _save_proj(工事名, {"custom_rows": custom_rows})
+                st.toast("追加しました")
+                st.rerun()
+
+        # ── 登録済み一覧 ────────────────────────────────────────
+        if custom_rows:
+            st.divider()
+            st.markdown("**登録済みの手動行**")
+            for i, row in enumerate(custom_rows):
+                f = row.get("fields", {})
+                sheet_key = row.get("sheet", "")
+                # 先頭3列の非空値でサマリー表示
+                preview_cols = _CUSTOM_SHEET_COLS.get(sheet_key, list(f.keys()))[:3]
+                summary = "　/　".join(str(f.get(c, "")) for c in preview_cols if f.get(c))
+                pos = row.get("after_kojyo", "末尾")
+                pos_label = "末尾" if pos == "末尾" else f"「{pos}」の後"
+                c1, c2 = st.columns([6, 1])
+                with c1:
+                    st.markdown(
+                        f'<span style="font-size:.8rem;color:#888;">[{sheet_key}]</span> '
+                        f'{summary} '
+                        f'<span style="font-size:.78rem;color:#C01820;">→ {pos_label}</span>',
+                        unsafe_allow_html=True,
+                    )
+                with c2:
+                    if st.button("削除", key=f"cr_del_{i}"):
+                        custom_rows.pop(i)
+                        _save_proj(工事名, {"custom_rows": custom_rows})
+                        st.rerun()
+        else:
+            st.caption("登録済みの手動行はありません")
+
+
 def _render_output():
     """④ 出力ページ。"""
     si = st.session_state.suryo_info
@@ -1105,6 +1211,9 @@ def _render_output():
         st.info(f"要選択 {n_yo} 件中 {confirmed} 件が確定済みです。未確認の {n_yo - confirmed} 件は全候補を自動採用します。"
                 f"　→ ③マッチングで確認できます。")
 
+    # ── 手動行の追加・管理 ─────────────────────────────────────
+    _render_custom_rows(si.get("工事名", ""))
+
     # ── ボタン ───────────────────────────────────────────────
     col_out, col_dl, _ = st.columns([2, 1, 1])
     with col_out:
@@ -1125,7 +1234,12 @@ def _render_output():
                             db_kojyo = label.split(" / ")[0].strip()
                             if db_kojyo and db_kojyo not in dmap:
                                 dmap[db_kojyo] = suryo_kojyo
-                    excel_bytes = write_excel(filtered, 工事名=si["工事名"], dekigata_kojyo_map=dmap)
+                    _proj = _load_proj(si["工事名"])
+                    excel_bytes = write_excel(
+                        filtered, 工事名=si["工事名"],
+                        dekigata_kojyo_map=dmap,
+                        custom_rows=_proj.get("custom_rows", []),
+                    )
                 safe = re.sub(r'[\\/:*?"<>|　 ]', '_', si["工事名"])
                 st.session_state.excel_cache = excel_bytes
                 st.session_state.excel_fname = (f"施工管理計画_{safe}.xlsx" if safe
