@@ -1179,16 +1179,25 @@ def _render_custom_rows(工事名: str):
             st.caption("登録済みの手動行はありません")
 
 
+def _row_label(df: pd.DataFrame, i: int) -> str:
+    """行のプレビューラベルを生成する（先頭2列の値）。"""
+    preview = "　".join(
+        str(df.iloc[i][c]) for c in list(df.columns)[:2]
+        if str(df.iloc[i][c]).strip() not in ("", "nan")
+    )
+    return f"{i + 1}行目　{preview}"
+
+
 def _render_sheet_editor(kojyo_name: str, sheets: dict):
     """指定プロジェクトのシート編集UI（3タブ）。"""
     safe = re.sub(r'[\\/:*?"<>|　 ]', '_', kojyo_name) if kojyo_name else "project"
 
-    # ── ダウンロードボタン ────────────────────────────────
+    # ── ヘッダー & ダウンロード ───────────────────────────
     hcol, dcol = st.columns([3, 1])
     with hcol:
         st.markdown(f"### 📝 {kojyo_name}")
     with dcol:
-        if st.button("🔄 Excelを生成・ダウンロード", type="primary", key="pm_regen"):
+        if st.button("🔄 Excelを生成", type="primary", key="pm_regen"):
             try:
                 with st.spinner("生成中..."):
                     new_bytes = write_excel_from_dfs(
@@ -1205,7 +1214,6 @@ def _render_sheet_editor(kojyo_name: str, sheets: dict):
                 st.error("生成エラー")
                 with st.expander("詳細"): st.code(traceback.format_exc())
 
-    # ダウンロードボタン（生成済みの場合）
     if st.session_state.get("excel_cache") and st.session_state.get("excel_fname", "").startswith(f"施工管理計画_{safe}"):
         st.download_button(
             "⬇ ダウンロード",
@@ -1223,39 +1231,70 @@ def _render_sheet_editor(kojyo_name: str, sheets: dict):
 
     for tab, sk in zip(tabs, sheet_keys):
         with tab:
-            df: pd.DataFrame = sheets[sk]
+            df: pd.DataFrame = sheets[sk].reset_index(drop=True)
             n = len(df)
+            cols = list(df.columns)
 
-            display_df = df.copy().reset_index(drop=True)
-            display_df.index = display_df.index + 1
-            display_df.index.name = "行番号"
-            st.dataframe(display_df, use_container_width=True)
+            # ── ① データ編集（data_editor） ──────────────
+            st.caption("セルをクリックして直接編集 → 「変更を保存」で確定")
+            edited_df = st.data_editor(
+                df.copy(),
+                num_rows="fixed",
+                use_container_width=True,
+                key=f"de_{kojyo_name}_{sk}",
+                hide_index=False,
+            )
+            if st.button("💾 変更を保存", key=f"save_{kojyo_name}_{sk}"):
+                sheets[sk] = edited_df.reset_index(drop=True)
+                st.session_state.project_sheets = sheets
+                if db.is_available():
+                    db.save_project(kojyo_name, sheets)
+                st.toast("変更を保存しました")
+                st.rerun()
 
-            # ── 行を挿入 ─────────────────────────────────
-            with st.expander("行を挿入", expanded=False):
-                ins_after = st.number_input(
-                    f"何行目の後に挿入？（0 = 先頭、{n} = 末尾）",
-                    min_value=0, max_value=n, value=n, step=1,
-                    key=f"ins_after_{kojyo_name}_{sk}",
+            st.divider()
+
+            # ── ② 行を挿入 ───────────────────────────────
+            st.markdown("#### ➕ 行を挿入")
+            with st.container(border=True):
+                # 挿入位置をセレクトボックスで選択
+                pos_options = ["── 先頭に追加"] + [_row_label(df, i) for i in range(n)]
+                pos_sel = st.selectbox(
+                    "挿入位置（この行の後ろに入ります）",
+                    pos_options,
+                    index=n,          # デフォルト: 末尾
+                    key=f"ins_pos_{kojyo_name}_{sk}",
                 )
-                cols = list(df.columns)
+                ins_after = pos_options.index(pos_sel)  # 0=先頭, 1=1行目の後, ...
+
+                if ins_after == 0:
+                    st.caption("↳ テーブルの一番上に挿入されます")
+                elif ins_after == n:
+                    st.caption("↳ テーブルの末尾に追加されます")
+                else:
+                    st.caption(f"↳ {ins_after}行目と{ins_after + 1}行目の間に挿入されます")
+
+                st.markdown("**入力フォーム**")
                 new_row: dict = {}
                 pairs = [cols[i:i+2] for i in range(0, len(cols), 2)]
                 for pair in pairs:
                     wcols = st.columns(len(pair))
                     for wc, col in zip(wcols, pair):
                         with wc:
-                            new_row[col] = st.text_input(col, key=f"ins_{kojyo_name}_{sk}_{col}")
+                            new_row[col] = st.text_input(
+                                col, key=f"ins_{kojyo_name}_{sk}_{col}",
+                                placeholder=f"{col}を入力",
+                            )
 
-                if st.button("挿入", key=f"ins_btn_{kojyo_name}_{sk}", type="primary"):
+                if st.button("➕ 挿入する", key=f"ins_btn_{kojyo_name}_{sk}", type="primary"):
                     if not any(str(v).strip() for v in new_row.values()):
                         st.warning("少なくとも1つのフィールドを入力してください。")
                     else:
                         new_df_row = pd.DataFrame([new_row])
-                        pos = int(ins_after)
+                        pos = ins_after
                         if pos <= 0:
                             new_df = pd.concat([new_df_row, df], ignore_index=True)
-                        elif pos >= len(df):
+                        elif pos >= n:
                             new_df = pd.concat([df, new_df_row], ignore_index=True)
                         else:
                             new_df = pd.concat(
@@ -1266,24 +1305,28 @@ def _render_sheet_editor(kojyo_name: str, sheets: dict):
                         st.session_state.project_sheets = sheets
                         if db.is_available():
                             db.save_project(kojyo_name, sheets)
-                        st.toast(f"{pos + 1} 行目に挿入しました")
+                        st.toast("挿入しました")
                         st.rerun()
 
-            # ── 行を削除 ─────────────────────────────────
+            # ── ③ 行を削除 ───────────────────────────────
             if n > 0:
-                with st.expander("行を削除", expanded=False):
-                    del_idx = st.number_input(
-                        f"削除する行番号（1〜{n}）",
-                        min_value=1, max_value=n, value=1, step=1,
-                        key=f"del_idx_{kojyo_name}_{sk}",
+                st.markdown("#### 🗑 行を削除")
+                with st.container(border=True):
+                    del_options = [_row_label(df, i) for i in range(n)]
+                    del_sel = st.selectbox(
+                        "削除する行を選択",
+                        del_options,
+                        key=f"del_sel_{kojyo_name}_{sk}",
                     )
-                    if st.button("削除", key=f"del_btn_{kojyo_name}_{sk}"):
-                        new_df = df.drop(df.index[int(del_idx) - 1]).reset_index(drop=True)
+                    del_idx = del_options.index(del_sel)
+                    st.caption(f"↳ {del_idx + 1}行目を削除します")
+                    if st.button("🗑 削除する", key=f"del_btn_{kojyo_name}_{sk}"):
+                        new_df = df.drop(df.index[del_idx]).reset_index(drop=True)
                         sheets[sk] = new_df
                         st.session_state.project_sheets = sheets
                         if db.is_available():
                             db.save_project(kojyo_name, sheets)
-                        st.toast(f"{del_idx} 行目を削除しました")
+                        st.toast("削除しました")
                         st.rerun()
 
 
