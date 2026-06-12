@@ -902,6 +902,12 @@ def _render_matching():
                         f'<div class="cand-foot">ⓘ 差分（{"・".join(sorted(diff_d))}）をハイライト表示</div>',
                         unsafe_allow_html=True,
                     )
+                _, _desel_d_col = st.columns([5, 1])
+                with _desel_d_col:
+                    if st.button("全解除", key=f"desel_all_d_{sel_idx}"):
+                        cur = st.session_state.row_selections.get(ckey) or {"出来形": items_d, "品質管理": items_h, "撮影箇所": items_p}
+                        st.session_state.row_selections[ckey] = {**cur, "出来形": []}
+                        st.rerun()
             elif len(items_d) == 1:
                 lbl    = items_d[0]
                 db_row = _lookup_db(lbl, "出来形管理")
@@ -927,22 +933,38 @@ def _render_matching():
                     with ch:
                         new_sel_h = []
                         if items_h:
-                            _sublabel("品質管理")
+                            hdr_h, btn_h = st.columns([4, 1])
+                            with hdr_h:
+                                _sublabel("品質管理")
+                            with btn_h:
+                                if st.button("全解除", key=f"desel_all_h_{sel_idx}", use_container_width=True):
+                                    cur = st.session_state.row_selections.get(ckey) or {"出来形": items_d, "品質管理": items_h, "撮影箇所": items_p}
+                                    st.session_state.row_selections[ckey] = {**cur, "品質管理": []}
+                                    st.rerun()
+                            cur_h = saved.get("品質管理", items_h) if saved else items_h
                             for kojyo,sub in _group_items(items_h).items():
                                 if len(_group_items(items_h))>1: st.caption(kojyo)
                                 for fl,dl in sub:
-                                    if st.checkbox(dl,value=True,key=f"chk_h_{sel_idx}_{items_h.index(fl)}"):
+                                    if st.checkbox(dl,value=fl in cur_h,key=f"chk_h_{sel_idx}_{items_h.index(fl)}"):
                                         new_sel_h.append(fl)
                         else:
                             st.caption("該当なし")
                     with cp:
                         new_sel_p = []
                         if items_p:
-                            _sublabel("撮影箇所")
+                            hdr_p, btn_p = st.columns([4, 1])
+                            with hdr_p:
+                                _sublabel("撮影箇所")
+                            with btn_p:
+                                if st.button("全解除", key=f"desel_all_p_{sel_idx}", use_container_width=True):
+                                    cur = st.session_state.row_selections.get(ckey) or {"出来形": items_d, "品質管理": items_h, "撮影箇所": items_p}
+                                    st.session_state.row_selections[ckey] = {**cur, "撮影箇所": []}
+                                    st.rerun()
+                            cur_p = saved.get("撮影箇所", items_p) if saved else items_p
                             for kojyo,sub in _group_items(items_p).items():
                                 if len(_group_items(items_p))>1: st.caption(kojyo)
                                 for fl,dl in sub:
-                                    if st.checkbox(dl,value=True,key=f"chk_p_{sel_idx}_{items_p.index(fl)}"):
+                                    if st.checkbox(dl,value=fl in cur_p,key=f"chk_p_{sel_idx}_{items_p.index(fl)}"):
                                         new_sel_p.append(fl)
                         else:
                             st.caption("該当なし")
