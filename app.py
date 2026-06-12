@@ -907,6 +907,8 @@ def _render_matching():
                     if st.button("全解除", key=f"desel_all_d_{sel_idx}"):
                         cur = st.session_state.row_selections.get(ckey) or {"出来形": items_d, "品質管理": items_h, "撮影箇所": items_p}
                         st.session_state.row_selections[ckey] = {**cur, "出来形": []}
+                        for _i in range(len(items_d[:4])):
+                            st.session_state[f"chk_d_{sel_idx}_{_i}"] = False
                         st.rerun()
             elif len(items_d) == 1:
                 lbl    = items_d[0]
@@ -940,6 +942,8 @@ def _render_matching():
                                 if st.button("全解除", key=f"desel_all_h_{sel_idx}", use_container_width=True):
                                     cur = st.session_state.row_selections.get(ckey) or {"出来形": items_d, "品質管理": items_h, "撮影箇所": items_p}
                                     st.session_state.row_selections[ckey] = {**cur, "品質管理": []}
+                                    for _i in range(len(items_h)):
+                                        st.session_state[f"chk_h_{sel_idx}_{_i}"] = False
                                     st.rerun()
                             cur_h = saved.get("品質管理", items_h) if saved else items_h
                             for kojyo,sub in _group_items(items_h).items():
@@ -959,6 +963,8 @@ def _render_matching():
                                 if st.button("全解除", key=f"desel_all_p_{sel_idx}", use_container_width=True):
                                     cur = st.session_state.row_selections.get(ckey) or {"出来形": items_d, "品質管理": items_h, "撮影箇所": items_p}
                                     st.session_state.row_selections[ckey] = {**cur, "撮影箇所": []}
+                                    for _i in range(len(items_p)):
+                                        st.session_state[f"chk_p_{sel_idx}_{_i}"] = False
                                     st.rerun()
                             cur_p = saved.get("撮影箇所", items_p) if saved else items_p
                             for kojyo,sub in _group_items(items_p).items():
