@@ -1289,9 +1289,16 @@ def _render_sheet_editor(kojyo_name: str, sheets: dict):
 
 def _render_project_mgmt():
     """📁 プロジェクト管理ページ。"""
-    st.markdown('<div class="page-card">', unsafe_allow_html=True)
-    st.markdown("## 📁 プロジェクト管理")
+    # ── ヘッダーカード（使い方ページと同じ構造）──────────
+    st.markdown(
+        '<div class="page-card">'
+        '<div class="page-card-title">📁 プロジェクト管理</div>'
+        '<div class="page-card-sub">工事ごとのExcelデータを保存・編集できます</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
 
+    # ── Supabase接続状態 ──────────────────────────────────
     if db.is_available():
         st.caption("☁ Supabase 接続済み：編集内容は自動保存されます。")
     else:
@@ -1302,64 +1309,56 @@ def _render_project_mgmt():
         except Exception as _e:
             st.error(f"⚠ secrets 読み込みエラー: {_e}")
 
-    # ── プロジェクト選択 ─────────────────────────────────
-    # 現在編集中のプロジェクトがあれば先に表示
+    # ── プロジェクト一覧カード ────────────────────────────
     editing_name = st.session_state.get("pm_editing")
     editing_sheets = st.session_state.get("project_sheets") if editing_name else None
 
     proj_list = db.list_projects() if db.is_available() else []
 
-    # ④出力で生成済み・未保存のものを先頭に追加（Supabaseにない場合）
     si = st.session_state.get("suryo_info") or {}
     current_name = si.get("工事名", "")
     current_sheets = st.session_state.get("project_sheets")
     if current_name and current_sheets is not None and current_name not in proj_list:
         proj_list = [current_name] + proj_list
 
-    if not proj_list:
-        st.info("保存済みプロジェクトがありません。④ 出力でExcelを生成すると自動的に保存されます。")
-        st.markdown('</div>', unsafe_allow_html=True)
-        return
-
-    # ── プロジェクト一覧 ──────────────────────────────────
-    st.markdown("### プロジェクト一覧")
-    for pname in proj_list:
-        is_active = (editing_name == pname)
-        row_cols = st.columns([5, 1, 1])
-        with row_cols[0]:
-            label = f"**{pname}**" if is_active else pname
-            if st.button(label, key=f"pm_open_{pname}", use_container_width=True):
-                if is_active:
-                    # 既に開いているので閉じる
-                    st.session_state.pm_editing = None
-                else:
-                    # Supabaseから読み込み（なければsession_stateの現在データ）
-                    loaded = db.load_project(pname) if db.is_available() else None
-                    if loaded:
-                        st.session_state.project_sheets = loaded
-                        st.session_state.pm_editing = pname
-                    elif pname == current_name and current_sheets is not None:
-                        st.session_state.pm_editing = pname
-                    else:
-                        st.warning(f"「{pname}」のデータが見つかりません。")
-                st.rerun()
-        with row_cols[1]:
-            st.caption("編集中" if is_active else "")
-        with row_cols[2]:
-            if db.is_available():
-                if st.button("🗑", key=f"pm_del_{pname}", help="削除"):
-                    db.delete_project(pname)
-                    if editing_name == pname:
-                        st.session_state.pm_editing = None
-                    st.toast(f"「{pname}」を削除しました")
-                    st.rerun()
+    with st.container(border=True):
+        st.markdown("**プロジェクト一覧**")
+        if not proj_list:
+            st.info("保存済みプロジェクトがありません。④ 出力でExcelを生成すると自動的に保存されます。")
+        else:
+            for pname in proj_list:
+                is_active = (editing_name == pname)
+                row_cols = st.columns([5, 1, 1])
+                with row_cols[0]:
+                    label = f"**{pname}**" if is_active else pname
+                    if st.button(label, key=f"pm_open_{pname}", use_container_width=True):
+                        if is_active:
+                            st.session_state.pm_editing = None
+                        else:
+                            loaded = db.load_project(pname) if db.is_available() else None
+                            if loaded:
+                                st.session_state.project_sheets = loaded
+                                st.session_state.pm_editing = pname
+                            elif pname == current_name and current_sheets is not None:
+                                st.session_state.pm_editing = pname
+                            else:
+                                st.warning(f"「{pname}」のデータが見つかりません。")
+                        st.rerun()
+                with row_cols[1]:
+                    st.caption("▶ 編集中" if is_active else "")
+                with row_cols[2]:
+                    if db.is_available():
+                        if st.button("🗑", key=f"pm_del_{pname}", help="削除"):
+                            db.delete_project(pname)
+                            if editing_name == pname:
+                                st.session_state.pm_editing = None
+                            st.toast(f"「{pname}」を削除しました")
+                            st.rerun()
 
     # ── 選択中プロジェクトの編集UI ───────────────────────
     if editing_name and editing_sheets is not None:
-        st.divider()
-        _render_sheet_editor(editing_name, editing_sheets)
-
-    st.markdown('</div>', unsafe_allow_html=True)
+        with st.container(border=True):
+            _render_sheet_editor(editing_name, editing_sheets)
 
 
 def _render_output():
