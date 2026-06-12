@@ -1295,7 +1295,12 @@ def _render_project_mgmt():
     if db.is_available():
         st.caption("☁ Supabase 接続済み：編集内容は自動保存されます。")
     else:
-        st.warning("⚠ Supabase 未設定：プロジェクトは保存されません。④ 出力 で生成した場合のみ編集できます。")
+        try:
+            _url = st.secrets["supabase"]["url"]
+            _key = st.secrets["supabase"]["key"]
+            st.warning(f"⚠ secrets は読めましたが接続失敗。url={_url[:30]}... key={_key[:15]}...")
+        except Exception as _e:
+            st.error(f"⚠ secrets 読み込みエラー: {_e}")
 
     # ── プロジェクト選択 ─────────────────────────────────
     # 現在編集中のプロジェクトがあれば先に表示
