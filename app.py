@@ -852,6 +852,20 @@ def _render_matching():
         else:
             saved = st.session_state.row_selections.get(ckey)
 
+            # 全解除フラグの処理（ウィジェット描画前に実行）
+            for _ck, _cat, _pfx, _n in [
+                ("d", "出来形",   "chk_d", len(items_d[:4])),
+                ("h", "品質管理", "chk_h", len(items_h)),
+                ("p", "撮影箇所", "chk_p", len(items_p)),
+            ]:
+                if st.session_state.pop(f"_desel_{_ck}_{sel_idx}", False):
+                    for _i in range(_n):
+                        st.session_state.pop(f"{_pfx}_{sel_idx}_{_i}", None)
+                    _base = st.session_state.row_selections.get(ckey) or \
+                            {"出来形": items_d, "品質管理": items_h, "撮影箇所": items_p}
+                    st.session_state.row_selections[ckey] = {**_base, _cat: []}
+            saved = st.session_state.row_selections.get(ckey)
+
             # 進捗＋ナビ（要選択行のみ）
             if cur_pos is not None and yo_idxs:
                 done  = sum(1 for i in yo_idxs
@@ -905,10 +919,7 @@ def _render_matching():
                 _, _desel_d_col = st.columns([5, 1])
                 with _desel_d_col:
                     if st.button("全解除", key=f"desel_all_d_{sel_idx}"):
-                        cur = st.session_state.row_selections.get(ckey) or {"出来形": items_d, "品質管理": items_h, "撮影箇所": items_p}
-                        st.session_state.row_selections[ckey] = {**cur, "出来形": []}
-                        for _i in range(len(items_d[:4])):
-                            st.session_state[f"chk_d_{sel_idx}_{_i}"] = False
+                        st.session_state[f"_desel_d_{sel_idx}"] = True
                         st.rerun()
             elif len(items_d) == 1:
                 lbl    = items_d[0]
@@ -940,10 +951,7 @@ def _render_matching():
                                 _sublabel("品質管理")
                             with btn_h:
                                 if st.button("全解除", key=f"desel_all_h_{sel_idx}", use_container_width=True):
-                                    cur = st.session_state.row_selections.get(ckey) or {"出来形": items_d, "品質管理": items_h, "撮影箇所": items_p}
-                                    st.session_state.row_selections[ckey] = {**cur, "品質管理": []}
-                                    for _i in range(len(items_h)):
-                                        st.session_state[f"chk_h_{sel_idx}_{_i}"] = False
+                                    st.session_state[f"_desel_h_{sel_idx}"] = True
                                     st.rerun()
                             cur_h = saved.get("品質管理", items_h) if saved else items_h
                             for kojyo,sub in _group_items(items_h).items():
@@ -961,10 +969,7 @@ def _render_matching():
                                 _sublabel("撮影箇所")
                             with btn_p:
                                 if st.button("全解除", key=f"desel_all_p_{sel_idx}", use_container_width=True):
-                                    cur = st.session_state.row_selections.get(ckey) or {"出来形": items_d, "品質管理": items_h, "撮影箇所": items_p}
-                                    st.session_state.row_selections[ckey] = {**cur, "撮影箇所": []}
-                                    for _i in range(len(items_p)):
-                                        st.session_state[f"chk_p_{sel_idx}_{_i}"] = False
+                                    st.session_state[f"_desel_p_{sel_idx}"] = True
                                     st.rerun()
                             cur_p = saved.get("撮影箇所", items_p) if saved else items_p
                             for kojyo,sub in _group_items(items_p).items():
