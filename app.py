@@ -20,6 +20,7 @@ from extractor import (
     get_unique_kojyo,
     build_match_detail,
     filter_by_row_labels,
+    get_implicit_hinshitsu_labels,
     SURYO_LEVEL_COLS,
 )
 from excel_writer import write_excel, write_excel_from_dfs, SHEET_HINSHITSU, SHEET_DEKIGATA, SHEET_PHOTO
@@ -426,6 +427,15 @@ def _collect_labels(df_raw):
             if l and l not in seen_h: out_h.append(l); seen_h.add(l)
         for l in lp:
             if l and l not in seen_p: out_p.append(l); seen_p.add(l)
+
+    # 間接トリガーによる品管工種（セメント・コンクリート等）は行選択状態に関わらず常に追加
+    si = st.session_state.get("suryo_info")
+    if si and "工種階層" in si:
+        for l in get_implicit_hinshitsu_labels(si["工種階層"], kojyo_data["品質管理"]):
+            if l and l not in seen_h:
+                out_h.append(l)
+                seen_h.add(l)
+
     return out_d,out_h,out_p
 
 def _get_df_raw():

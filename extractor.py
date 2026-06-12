@@ -993,6 +993,15 @@ _IMPLICIT_HINSHITSU_RULES: list[tuple[list[str], list[str]]] = [
 ]
 
 
+def get_implicit_hinshitsu_labels(suryo_df: pd.DataFrame, db_hinshitsu_df: pd.DataFrame) -> list[str]:
+    """
+    数量総括表から間接トリガーで追加すべき品質管理ラベル（"工種 / 種別 / 試験項目" 形式）を返す。
+    行選択状態に関わらず常に品管一覧に含めるために使用する。
+    """
+    kojyo_list = _get_implicit_hinshitsu(suryo_df, db_hinshitsu_df)
+    return _expand_hinshitsu_rows(kojyo_list, db_hinshitsu_df).split("\n") if kojyo_list else []
+
+
 def _get_implicit_hinshitsu(suryo_df: pd.DataFrame, db_hinshitsu_df: pd.DataFrame) -> list[str]:
     """
     数量総括表の全キーワードを走査し、間接トリガーで追加すべき品質管理工種を返す。
