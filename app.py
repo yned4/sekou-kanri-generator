@@ -1377,7 +1377,7 @@ def _render_project_mgmt():
 
                 if is_renaming:
                     # ── リネーム入力行 ──────────────────────
-                    rc1, rc2, rc3 = st.columns([4, 3, 3])
+                    rc1, rc2, rc3 = st.columns([6, 2, 2])
                     with rc1:
                         new_name = st.text_input(
                             "新しい名前", value=pname,
@@ -1385,8 +1385,7 @@ def _render_project_mgmt():
                             label_visibility="collapsed",
                         )
                     with rc2:
-                        if st.button("確定", key=f"pm_rename_ok_{pname}",
-                                     use_container_width=True):
+                        if st.button("確定", key=f"pm_rename_ok_{pname}"):
                             new_name = new_name.strip()
                             if new_name and new_name != pname:
                                 if db.is_available():
@@ -1395,13 +1394,12 @@ def _render_project_mgmt():
                             st.session_state.pm_renaming = None
                             st.rerun()
                     with rc3:
-                        if st.button("キャンセル", key=f"pm_rename_cancel_{pname}",
-                                     use_container_width=True):
+                        if st.button("キャンセル", key=f"pm_rename_cancel_{pname}"):
                             st.session_state.pm_renaming = None
                             st.rerun()
                 else:
                     # ── 通常行 ─────────────────────────────
-                    row_cols = st.columns([4, 3, 3])
+                    row_cols = st.columns([6, 2, 2])
                     with row_cols[0]:
                         if st.button(pname, key=f"pm_open_{pname}", use_container_width=True):
                             loaded = db.load_project(pname) if db.is_available() else None
@@ -1418,13 +1416,11 @@ def _render_project_mgmt():
                             st.session_state.page = "project_edit"
                             st.rerun()
                     with row_cols[1]:
-                        if st.button("名前を変更", key=f"pm_rename_{pname}",
-                                     use_container_width=True):
+                        if st.button("名前を変更", key=f"pm_rename_{pname}"):
                             st.session_state.pm_renaming = pname
                             st.rerun()
                     with row_cols[2]:
-                        if st.button("削除", key=f"pm_del_{pname}",
-                                     use_container_width=True):
+                        if st.button("削除", key=f"pm_del_{pname}"):
                             if db.is_available():
                                 db.delete_project(pname)
                             st.toast(f"「{pname}」を削除しました")
