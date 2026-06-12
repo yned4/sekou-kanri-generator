@@ -13,6 +13,8 @@ import traceback
 import pandas as pd
 import streamlit as st
 
+import db
+
 from extractor import (
     extract_suryo,
     get_unique_kojyo,
@@ -489,6 +491,33 @@ with st.sidebar:
                  type="primary" if page=="help" else "secondary", key="nav_help"):
         st.session_state.page = "help"; st.rerun()
 
+    # ─ 保存済みプロジェクト ──────────────────────────────────
+    if db.is_available():
+        st.divider()
+        st.markdown("### 保存済みプロジェクト")
+        proj_list = db.list_projects()
+        if proj_list:
+            for pname in proj_list:
+                pc1, pc2 = st.columns([5, 1])
+                with pc1:
+                    if st.button(pname, key=f"proj_load_{pname}",
+                                 use_container_width=True,
+                                 help="クリックして読み込む"):
+                        loaded = db.load_project(pname)
+                        if loaded:
+                            st.session_state.project_sheets = loaded
+                            st.session_state.page = "excel_edit"
+                            st.toast(f"「{pname}」を読み込みました")
+                            st.rerun()
+                with pc2:
+                    if st.button("🗑", key=f"proj_del_{pname}",
+                                 help="削除"):
+                        db.delete_project(pname)
+                        st.toast(f"「{pname}」を削除しました")
+                        st.rerun()
+        else:
+            st.caption("保存済みプロジェクトはありません")
+
     st.divider()
 
     # ─ DB情報 ────────────────────────────────────────────────
@@ -507,6 +536,7 @@ with st.sidebar:
         st.session_state.row_selections  = {}
         st.session_state.confirmed_keys  = set()
         st.session_state.excel_cache = st.session_state.excel_fname = None
+        st.session_state.project_sheets = None
         st.session_state.page = "upload"
         st.rerun()
 
@@ -1194,6 +1224,11 @@ def _render_excel_edit():
     st.markdown("## ⑤ Excel編集")
     st.caption("生成済みExcelの各シートを確認・編集できます。行の挿入・削除後は「Excelを再生成」でダウンロードしてください。")
 
+    if db.is_available():
+        st.success("☁ Supabase に接続済み：編集内容は自動保存されます。")
+    else:
+        st.warning("⚠ Supabase 未設定：編集内容はこのセッション中のみ保持されます。")
+
     # ── 再生成ボタン ─────────────────────────────────────
     safe = re.sub(r'[\\/:*?"<>|　 ]', '_', kojyo_name) if kojyo_name else "project"
     if st.button("🔄 Excelを再生成・ダウンロード", type="primary", key="edit_regen"):
@@ -1262,6 +1297,8 @@ def _render_excel_edit():
                         )
                     sheets[sk] = new_df
                     st.session_state.project_sheets = sheets
+                    if db.is_available():
+                        db.save_project(kojyo_name, sheets)
                     st.toast(f"{pos + 1} 行目に挿入しました")
                     st.rerun()
 
@@ -1277,6 +1314,8 @@ def _render_excel_edit():
                     new_df = df.drop(df.index[int(del_idx) - 1]).reset_index(drop=True)
                     sheets[sk] = new_df
                     st.session_state.project_sheets = sheets
+                    if db.is_available():
+                        db.save_project(kojyo_name, sheets)
                     st.toast(f"{del_idx} 行目を削除しました")
                     st.rerun()
 
@@ -1378,6 +1417,8 @@ def _render_output():
                 st.session_state.excel_fname = (f"施工管理計画_{safe}.xlsx" if safe
                                                 else "施工管理計画.xlsx")
                 st.session_state.project_sheets = dfs
+                if db.is_available():
+                    db.save_project(si["工事名"], dfs)
                 st.success("生成完了！ダウンロードボタンからファイルを取得してください。⑤ Excel編集 で内容を編集できます。")
                 st.rerun()
             except Exception:
