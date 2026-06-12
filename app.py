@@ -1295,9 +1295,7 @@ def _render_project_mgmt():
     if db.is_available():
         st.caption("☁ Supabase 接続済み：編集内容は自動保存されます。")
     else:
-        err = st.session_state.get("_db_error", "")
-        st.warning(f"⚠ Supabase 未設定または接続エラー：プロジェクトは保存されません。\n\n{err}" if err else
-                   "⚠ Supabase 未設定：プロジェクトは保存されません。④ 出力 で生成した場合のみ編集できます。")
+        st.warning("⚠ Supabase 未設定：プロジェクトは保存されません。④ 出力 で生成した場合のみ編集できます。")
 
     # ── プロジェクト選択 ─────────────────────────────────
     # 現在編集中のプロジェクトがあれば先に表示

@@ -24,26 +24,31 @@ import pandas as pd
 import streamlit as st
 
 # ---------------------------------------------------------------------------
-# クライアント（アプリ全体で1インスタンス）
+# クライアント（毎回新規作成 ― secretsの読み込みタイミング問題を回避）
 # ---------------------------------------------------------------------------
 
-@st.cache_resource
 def _client():
-    """Supabase クライアントを返す。未設定なら None。"""
+    """Supabase クライアントを返す。未設定・エラーなら None。"""
     try:
         from supabase import create_client
         url = st.secrets["supabase"]["url"]
         key = st.secrets["supabase"]["key"]
         return create_client(url, key)
-    except Exception as e:
-        # 設定ミスや接続エラーの場合はsession_stateにエラーを記録
-        st.session_state["_db_error"] = str(e)
+    except KeyError:
+        return None          # secrets.toml に [supabase] がない
+    except Exception:
         return None
 
 
 def is_available() -> bool:
-    """Supabase が設定・接続済みなら True。"""
-    return _client() is not None
+    """Supabase が設定・接続可能なら True。"""
+    try:
+        from supabase import create_client
+        url = st.secrets["supabase"]["url"]
+        key = st.secrets["supabase"]["key"]
+        return bool(url and key)
+    except Exception:
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -70,7 +75,6 @@ def save_project(kojyo_name: str, sheets: dict[str, pd.DataFrame]) -> None:
     payload = {
         "kojyo_name": kojyo_name,
         "sheets": _dfs_to_json(sheets),
-        "updated_at": "now()",
     }
     client.table("projects").upsert(payload, on_conflict="kojyo_name").execute()
 
