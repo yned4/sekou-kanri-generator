@@ -1065,7 +1065,7 @@ def _render_output():
                     dmap = {}
                     for _, row in df_raw_out[df_raw_out["状態"].isin(["確定", "要選択"])].iterrows():
                         ckey = _chain_key(row)
-                        suryo_kojyo = str(row.get("工種", "")).strip()
+                        suryo_kojyo = str(row.get("種別", "") or row.get("工種", "")).strip()
                         saved = st.session_state.row_selections.get(ckey)
                         all_d = [x.strip() for x in str(row.get("出来形マッチ", "")).split("\n") if x.strip()]
                         selected_d = saved["出来形"] if saved else all_d
