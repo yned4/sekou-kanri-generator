@@ -1232,6 +1232,11 @@ def _render_sheet_editor(kojyo_name: str, sheets: dict):
     for tab, sk in zip(tabs, sheet_keys):
         with tab:
             df: pd.DataFrame = sheets[sk].reset_index(drop=True)
+            # Excelと同じ列順に並び替え（備考が末尾になるよう保証）
+            expected_cols = _CUSTOM_SHEET_COLS.get(sk, list(df.columns))
+            ordered_cols = [c for c in expected_cols if c in df.columns]
+            extra_cols = [c for c in df.columns if c not in ordered_cols]
+            df = df[ordered_cols + extra_cols]
             n = len(df)
             cols = list(df.columns)
 
