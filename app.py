@@ -20,7 +20,7 @@ from extractor import (
     filter_by_row_labels,
     SURYO_LEVEL_COLS,
 )
-from excel_writer import write_excel, SHEET_HINSHITSU, SHEET_DEKIGATA, SHEET_PHOTO
+from excel_writer import write_excel, write_excel_from_dfs, SHEET_HINSHITSU, SHEET_DEKIGATA, SHEET_PHOTO
 from build_db import (
     DB_PATH,
     SHEET_DEKIGATA as DB_DEKIGATA,
@@ -255,8 +255,8 @@ hr{border-color:#E5E3DC!important;}
 # ===========================================================================
 # ステップ進捗バー
 # ===========================================================================
-_STEP_ORDER  = ["upload", "structure", "matching", "output"]
-_STEP_LABELS = ["① 取込", "② 構造化", "③ マッチング", "④ 出力"]
+_STEP_ORDER  = ["upload", "structure", "matching", "output", "excel_edit"]
+_STEP_LABELS = ["① 取込", "② 構造化", "③ マッチング", "④ 出力", "⑤ Excel編集"]
 
 
 def _render_step_bar(current_page: str) -> None:
@@ -335,6 +335,7 @@ if "confirmed_keys"  not in st.session_state: st.session_state["confirmed_keys"]
 if "page"            not in st.session_state: st.session_state["page"]            = "upload"
 if "excel_cache"     not in st.session_state: st.session_state["excel_cache"]     = None
 if "excel_fname"     not in st.session_state: st.session_state["excel_fname"]     = None
+if "project_sheets"  not in st.session_state: st.session_state["project_sheets"]  = None
 
 # ===========================================================================
 # ヘルパー
@@ -470,6 +471,11 @@ with st.sidebar:
                  type="primary" if page=="output" else "secondary",
                  disabled=not has_data, key="nav_output"):
         st.session_state.page = "output"; st.rerun()
+    has_sheets = st.session_state.get("project_sheets") is not None
+    if st.button("⑤ Excel編集", use_container_width=True,
+                 type="primary" if page=="excel_edit" else "secondary",
+                 disabled=not has_sheets, key="nav_excel_edit"):
+        st.session_state.page = "excel_edit"; st.rerun()
 
     st.divider()
 
@@ -1172,6 +1178,111 @@ def _render_custom_rows(工事名: str):
             st.caption("登録済みの手動行はありません")
 
 
+def _render_excel_edit():
+    """⑤ Excel編集ページ。生成済みExcelのシートをアプリ上で編集する。"""
+    _render_step_bar("excel_edit")
+
+    sheets = st.session_state.get("project_sheets")
+    if not sheets:
+        st.info("まず ④ 出力 ページでExcelを生成してください。")
+        return
+
+    si = st.session_state.get("suryo_info", {})
+    kojyo_name = si.get("工事名", "")
+
+    st.markdown('<div class="page-card">', unsafe_allow_html=True)
+    st.markdown("## ⑤ Excel編集")
+    st.caption("生成済みExcelの各シートを確認・編集できます。行の挿入・削除後は「Excelを再生成」でダウンロードしてください。")
+
+    # ── 再生成ボタン ─────────────────────────────────────
+    safe = re.sub(r'[\\/:*?"<>|　 ]', '_', kojyo_name) if kojyo_name else "project"
+    if st.button("🔄 Excelを再生成・ダウンロード", type="primary", key="edit_regen"):
+        try:
+            with st.spinner("再生成中..."):
+                new_bytes = write_excel_from_dfs(
+                    df_d=sheets["出来形一覧"],
+                    df_h=sheets["品管一覧"],
+                    df_p=sheets["撮影箇所"],
+                )
+            st.session_state.excel_cache = new_bytes
+            fname = f"施工管理計画_{safe}.xlsx" if safe else "施工管理計画.xlsx"
+            st.session_state.excel_fname = fname
+            st.toast("再生成完了。④ 出力ページからダウンロードできます。")
+        except Exception:
+            st.error("再生成エラー")
+            with st.expander("詳細"): st.code(traceback.format_exc())
+
+    st.divider()
+
+    # ── シートタブ ───────────────────────────────────────
+    sheet_keys = ["出来形一覧", "品管一覧", "撮影箇所"]
+    tabs = st.tabs(sheet_keys)
+
+    for tab, sk in zip(tabs, sheet_keys):
+        with tab:
+            df: pd.DataFrame = sheets[sk]
+            n = len(df)
+
+            # 現在の内容を表示（行番号を先頭列に追加して表示）
+            display_df = df.copy().reset_index(drop=True)
+            display_df.index = display_df.index + 1  # 1始まり
+            display_df.index.name = "行番号"
+            st.dataframe(display_df, use_container_width=True)
+
+            # ── 行を挿入 ─────────────────────────────────
+            st.markdown("#### 行を挿入")
+            ins_after = st.number_input(
+                f"何行目の後に挿入しますか？（0 = 先頭、{n} = 末尾）",
+                min_value=0, max_value=n, value=n, step=1,
+                key=f"ins_after_{sk}",
+            )
+            cols = list(df.columns)
+            new_row: dict = {}
+            pairs = [cols[i:i+2] for i in range(0, len(cols), 2)]
+            for pair in pairs:
+                wcols = st.columns(len(pair))
+                for wc, col in zip(wcols, pair):
+                    with wc:
+                        new_row[col] = st.text_input(col, key=f"ins_{sk}_{col}")
+
+            if st.button("挿入", key=f"ins_btn_{sk}", type="primary"):
+                if not any(str(v).strip() for v in new_row.values()):
+                    st.warning("少なくとも1つのフィールドを入力してください。")
+                else:
+                    new_df_row = pd.DataFrame([new_row])
+                    pos = int(ins_after)
+                    if pos <= 0:
+                        new_df = pd.concat([new_df_row, df], ignore_index=True)
+                    elif pos >= len(df):
+                        new_df = pd.concat([df, new_df_row], ignore_index=True)
+                    else:
+                        new_df = pd.concat(
+                            [df.iloc[:pos], new_df_row, df.iloc[pos:]],
+                            ignore_index=True,
+                        )
+                    sheets[sk] = new_df
+                    st.session_state.project_sheets = sheets
+                    st.toast(f"{pos + 1} 行目に挿入しました")
+                    st.rerun()
+
+            # ── 行を削除 ─────────────────────────────────
+            if n > 0:
+                st.markdown("#### 行を削除")
+                del_idx = st.number_input(
+                    f"削除する行番号（1〜{n}）",
+                    min_value=1, max_value=n, value=1, step=1,
+                    key=f"del_idx_{sk}",
+                )
+                if st.button("削除", key=f"del_btn_{sk}"):
+                    new_df = df.drop(df.index[int(del_idx) - 1]).reset_index(drop=True)
+                    sheets[sk] = new_df
+                    st.session_state.project_sheets = sheets
+                    st.toast(f"{del_idx} 行目を削除しました")
+                    st.rerun()
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
 def _render_output():
     """④ 出力ページ。"""
     si = st.session_state.suryo_info
@@ -1256,16 +1367,18 @@ def _render_output():
                             db_kojyo = label.split(" / ")[0].strip()
                             if db_kojyo and db_kojyo not in dmap:
                                 dmap[db_kojyo] = suryo_kojyo
-                    excel_bytes = write_excel(
+                    excel_bytes, dfs = write_excel(
                         filtered, 工事名=si["工事名"],
                         dekigata_kojyo_map=dmap,
                         custom_rows=_get_custom_rows(),
+                        return_dfs=True,
                     )
                 safe = re.sub(r'[\\/:*?"<>|　 ]', '_', si["工事名"])
                 st.session_state.excel_cache = excel_bytes
                 st.session_state.excel_fname = (f"施工管理計画_{safe}.xlsx" if safe
                                                 else "施工管理計画.xlsx")
-                st.success("生成完了！ダウンロードボタンからファイルを取得してください。")
+                st.session_state.project_sheets = dfs
+                st.success("生成完了！ダウンロードボタンからファイルを取得してください。⑤ Excel編集 で内容を編集できます。")
                 st.rerun()
             except Exception:
                 st.error("生成エラー")
@@ -1711,6 +1824,8 @@ if page == "help":
     _render_help()
 elif page == "db_view":
     _render_db_view()
+elif page == "excel_edit" and st.session_state.get("project_sheets") is not None:
+    _render_excel_edit()
 elif page == "structure" and has_data:
     _render_structure()
 elif page in ("matching", "candidate") and has_data:

@@ -448,50 +448,15 @@ def _inject_custom_rows(df: pd.DataFrame, custom_rows: list, sheet_key: str) -> 
     return df
 
 
-def write_excel(
-    data: dict,
-    output_path: Optional[str] = None,
-    工事名: str = "",
-    dekigata_kojyo_map: dict = None,
-    custom_rows: Optional[list] = None,
-) -> bytes:
-    """
-    抽出データをExcelに書き出す。
-
-    シート構成（目標outputに合わせ最大4シート）:
-      (8) 品管一覧          – 品質管理基準及び規格値
-      (8) 出来形一覧        – 出来形管理基準及び規格値（前半）
-      (8) 出来形一覧 (2)   – 出来形管理基準及び規格値（後半、行数超過時のみ）
-      (8) 撮影箇所          – 撮影箇所一覧表
-
-    Args:
-        data:               filter_by_kojyo() または extract_from_pdf() の戻り値
-        output_path:        保存先パス。None の場合はバイト列を返す（Streamlit用）。
-        工事名:             数量総括表から取得した工事名。シート先頭行に表示する。
-        dekigata_kojyo_map: {国交省工種名: 数量総括表工種名} の対応辞書。
-                            出来形管理シートの「工種（大分類）」列に使用。
-
-    Returns:
-        output_path が None の場合は Excel バイト列、それ以外は None。
-    """
+def _build_wb(df_d: pd.DataFrame, df_h: pd.DataFrame, df_p: pd.DataFrame) -> "Workbook":
+    """DataFrameからWorkbookを構築する（内部ヘルパー）。"""
     wb = Workbook()
-    wb.remove(wb.active)  # デフォルトシートを削除
+    wb.remove(wb.active)
 
-    df_h = _reshape_hinshitsu(data["品質管理"])
-    df_d = _reshape_dekigata(data["出来形管理"], kojyo_to_suryo=dekigata_kojyo_map)
-    df_p = _reshape_photo(data["撮影箇所"])
-
-    if custom_rows:
-        df_h = _inject_custom_rows(df_h, custom_rows, "品管一覧")
-        df_d = _inject_custom_rows(df_d, custom_rows, "出来形一覧")
-        df_p = _inject_custom_rows(df_p, custom_rows, "撮影箇所")
-
-    # ── 品管一覧 ──────────────────────────────────────────
     ws_h = wb.create_sheet(SHEET_HINSHITSU)
     _write_sheet(ws_h, df_h, title=_SHEET_TITLE[SHEET_HINSHITSU],
                  merge_cols=["工種", "種別"])
 
-    # ── 出来形一覧（DEKIGATA_SPLIT_THRESHOLD超過時は2シートに分割） ──
     if len(df_d) > DEKIGATA_SPLIT_THRESHOLD:
         df_d1 = df_d.iloc[:DEKIGATA_SPLIT_THRESHOLD].reset_index(drop=True)
         df_d2 = df_d.iloc[DEKIGATA_SPLIT_THRESHOLD:].reset_index(drop=True)
@@ -506,11 +471,76 @@ def write_excel(
         _write_sheet(ws_d, df_d, title=_SHEET_TITLE[SHEET_DEKIGATA],
                      merge_cols=["工種", "種別"])
 
-    # ── 撮影箇所 ──────────────────────────────────────────
     ws_p = wb.create_sheet(SHEET_PHOTO)
     _write_sheet(ws_p, df_p, title=_SHEET_TITLE[SHEET_PHOTO])
 
-    # 保存
+    return wb
+
+
+def write_excel(
+    data: dict,
+    output_path: Optional[str] = None,
+    工事名: str = "",
+    dekigata_kojyo_map: dict = None,
+    custom_rows: Optional[list] = None,
+    return_dfs: bool = False,
+):
+    """
+    抽出データをExcelに書き出す。
+
+    Args:
+        data:               filter_by_kojyo() または extract_from_pdf() の戻り値
+        output_path:        保存先パス。None の場合はバイト列を返す（Streamlit用）。
+        工事名:             数量総括表から取得した工事名。シート先頭行に表示する。
+        dekigata_kojyo_map: {国交省工種名: 数量総括表工種名} の対応辞書。
+        custom_rows:        手動追加行リスト。
+        return_dfs:         True の場合 (bytes, dfs_dict) を返す。
+
+    Returns:
+        return_dfs=False: Excel バイト列（output_pathがNoneの場合）
+        return_dfs=True:  (bytes, {"出来形一覧": df_d, "品管一覧": df_h, "撮影箇所": df_p})
+    """
+    df_h = _reshape_hinshitsu(data["品質管理"])
+    df_d = _reshape_dekigata(data["出来形管理"], kojyo_to_suryo=dekigata_kojyo_map)
+    df_p = _reshape_photo(data["撮影箇所"])
+
+    if custom_rows:
+        df_h = _inject_custom_rows(df_h, custom_rows, "品管一覧")
+        df_d = _inject_custom_rows(df_d, custom_rows, "出来形一覧")
+        df_p = _inject_custom_rows(df_p, custom_rows, "撮影箇所")
+
+    wb = _build_wb(df_d, df_h, df_p)
+
+    if output_path:
+        wb.save(output_path)
+        result = None
+    else:
+        buf = io.BytesIO()
+        wb.save(buf)
+        result = buf.getvalue()
+
+    if return_dfs:
+        return result, {"出来形一覧": df_d.copy(), "品管一覧": df_h.copy(), "撮影箇所": df_p.copy()}
+    return result
+
+
+def write_excel_from_dfs(
+    df_d: pd.DataFrame,
+    df_h: pd.DataFrame,
+    df_p: pd.DataFrame,
+    output_path: Optional[str] = None,
+) -> bytes:
+    """
+    編集済みDataFrameから直接Excelを生成する（Excel編集ページ用）。
+
+    Args:
+        df_d: 出来形一覧 DataFrame
+        df_h: 品管一覧 DataFrame
+        df_p: 撮影箇所 DataFrame
+        output_path: 保存先パス。None の場合はバイト列を返す。
+    """
+    wb = _build_wb(df_d, df_h, df_p)
+
     if output_path:
         wb.save(output_path)
         return None
