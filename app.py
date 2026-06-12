@@ -893,13 +893,18 @@ def _render_matching():
             if len(items_d) >= 2:
                 db_rows_d = [_lookup_db(lbl,"出来形管理") for lbl in items_d[:4]]
                 diff_d    = _diff_cols(db_rows_d, _DISP_D)
-                cur_d     = saved["出来形"] if saved else items_d
+                cur_d     = saved.get("出来形", items_d) if saved else items_d
+                # session_state にキーがなければ cur_d で初期化
+                for _i, _lbl in enumerate(items_d[:4]):
+                    _k = f"chk_d_{sel_idx}_{_i}"
+                    if _k not in st.session_state:
+                        st.session_state[_k] = _lbl in cur_d
                 cols_c    = st.columns(min(len(items_d),4))
                 for i,(col,lbl) in enumerate(zip(cols_c, items_d[:4])):
                     with col:
                         parts  = [p.strip() for p in lbl.split(" / ")]
                         ctitle = " / ".join(parts[1:]) if len(parts)>1 else parts[0]
-                        is_sel = lbl in cur_d
+                        is_sel = st.session_state.get(f"chk_d_{sel_idx}_{i}", lbl in cur_d)
                         brd    = "border:1.5px solid #C01820;background:#FBEBEC;" if is_sel else ""
                         body   = _card_html(db_rows_d[i], _DISP_D, diff_d)
                         st.markdown(
@@ -909,7 +914,7 @@ def _render_matching():
                             f'</div>',
                             unsafe_allow_html=True,
                         )
-                        if st.checkbox("採用", value=is_sel, key=f"chk_d_{sel_idx}_{i}"):
+                        if st.checkbox("採用", key=f"chk_d_{sel_idx}_{i}"):
                             new_sel_d.append(lbl)
                 if diff_d:
                     st.markdown(
@@ -954,10 +959,15 @@ def _render_matching():
                                     st.session_state[f"_desel_h_{sel_idx}"] = True
                                     st.rerun()
                             cur_h = saved.get("品質管理", items_h) if saved else items_h
+                            for _i, _fl in enumerate(items_h):
+                                _k = f"chk_h_{sel_idx}_{_i}"
+                                if _k not in st.session_state:
+                                    st.session_state[_k] = _fl in cur_h
                             for kojyo,sub in _group_items(items_h).items():
                                 if len(_group_items(items_h))>1: st.caption(kojyo)
                                 for fl,dl in sub:
-                                    if st.checkbox(dl,value=fl in cur_h,key=f"chk_h_{sel_idx}_{items_h.index(fl)}"):
+                                    idx = items_h.index(fl)
+                                    if st.checkbox(dl, key=f"chk_h_{sel_idx}_{idx}"):
                                         new_sel_h.append(fl)
                         else:
                             st.caption("該当なし")
@@ -972,10 +982,15 @@ def _render_matching():
                                     st.session_state[f"_desel_p_{sel_idx}"] = True
                                     st.rerun()
                             cur_p = saved.get("撮影箇所", items_p) if saved else items_p
+                            for _i, _fl in enumerate(items_p):
+                                _k = f"chk_p_{sel_idx}_{_i}"
+                                if _k not in st.session_state:
+                                    st.session_state[_k] = _fl in cur_p
                             for kojyo,sub in _group_items(items_p).items():
                                 if len(_group_items(items_p))>1: st.caption(kojyo)
                                 for fl,dl in sub:
-                                    if st.checkbox(dl,value=fl in cur_p,key=f"chk_p_{sel_idx}_{items_p.index(fl)}"):
+                                    idx = items_p.index(fl)
+                                    if st.checkbox(dl, key=f"chk_p_{sel_idx}_{idx}"):
                                         new_sel_p.append(fl)
                         else:
                             st.caption("該当なし")
