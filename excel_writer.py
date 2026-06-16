@@ -486,8 +486,19 @@ def _build_wb(df_d: pd.DataFrame, df_h: pd.DataFrame, df_p: pd.DataFrame) -> "Wo
         _write_sheet(ws_d, df_d, title=_SHEET_TITLE[SHEET_DEKIGATA],
                      merge_cols=["工種", "種別"], tate_cols=["工種"])
 
+    # 撮影箇所: 左列から右列の順にソートしてからセル結合
+    # 区分の出現順（自然順）を保持したまま、工種・撮影項目で二次ソート
+    if not df_p.empty:
+        kubun_rank = {v: i for i, v in enumerate(dict.fromkeys(df_p["区分"].tolist()))}
+        df_p = df_p.copy()
+        df_p["_rank"] = df_p["区分"].map(kubun_rank)
+        inner_cols = [c for c in df_p.columns if c not in ("区分", "_rank")]
+        df_p = df_p.sort_values(["_rank"] + inner_cols, kind="stable")
+        df_p = df_p.drop(columns=["_rank"]).reset_index(drop=True)
+
     ws_p = wb.create_sheet(SHEET_PHOTO)
-    _write_sheet(ws_p, df_p, title=_SHEET_TITLE[SHEET_PHOTO])
+    _write_sheet(ws_p, df_p, title=_SHEET_TITLE[SHEET_PHOTO],
+                 merge_cols=list(df_p.columns))
 
     return wb
 
