@@ -824,30 +824,56 @@ def suggest_from_suryo_hierarchy(
     return sorted(suggested)
 
 
-# 1レベルで許容する最大マッチ数。超過時は階層文脈で絞り込みを試みる。
-_MAX_CHAIN_MATCHES = 10
+# 正規化済みキャッシュ（初回呼び出し時に構築）
+_norm_alias_cache = None
+_norm_narrowing_cache = None
 
 
-def _narrow_with_context(matches, deeper_norms, norm_db):
+def _get_norm_alias():
+    """kojyo_alias.ALIAS_B_TO_A を正規化済みキーで再構築したキャッシュを返す。"""
+    global _norm_alias_cache
+    if _norm_alias_cache is None:
+        from kojyo_alias import ALIAS_B_TO_A
+        _norm_alias_cache = {
+            _normalize(k): {_normalize(v) for v in vals}
+            for k, vals in ALIAS_B_TO_A.items()
+        }
+    return _norm_alias_cache
+
+
+def _get_norm_narrowing():
+    """match_filter.NARROWING_TABLE を正規化済みキーで再構築したキャッシュを返す。"""
+    global _norm_narrowing_cache
+    if _norm_narrowing_cache is None:
+        from match_filter import NARROWING_TABLE
+        _norm_narrowing_cache = {
+            _normalize(k): {_normalize(v) for v in vals}
+            for k, vals in NARROWING_TABLE.items()
+        }
+    return _norm_narrowing_cache
+
+
+def _narrow_with_shallower(matches, shallower_norms):
     """
-    matches を深い階層キーワードでチェーン式に絞り込む。
+    浅い階層キーワード（種別・工種）でマッチ候補を絞り込む。
 
-    deeper_norms を順に適用し、各キーワードで段階的にプレフィックスを短縮。
-    前段の絞り込み結果を次段に渡して累積的に絞る。
+    各キーワードをプレフィックス短縮しながら候補DB名に含まれるか確認し、
+    件数が減る場合のみ絞り込みを適用する。
     """
     current = [(k, _normalize(k)) for k in matches]
-    narrowed = False
-
-    for dn in deeper_norms:
-        for end in range(len(dn), 1, -1):
-            prefix = dn[:end]
+    for sn in shallower_norms:
+        for end in range(len(sn), 1, -1):
+            prefix = sn[:end]
             filtered = [(k, nk) for k, nk in current if prefix in nk]
             if filtered and len(filtered) < len(current):
                 current = filtered
-                narrowed = True
-                break  # このキーワードでの絞り込み完了、次のキーワードへ
+                break
+    result = [k for k, _ in current]
+    return result if len(result) < len(matches) else None
 
-    return [k for k, _ in current] if narrowed else None
+
+# 絞り込み後もこの件数を超えたら「汎用的すぎるキーワード」と判断して次のレベルへ
+_MAX_AFTER_NARROW = 15
 
 
 def _match_chain(chain: dict, norm_db: list) -> tuple:
@@ -855,51 +881,69 @@ def _match_chain(chain: dict, norm_db: list) -> tuple:
     1チェーン（工種/種別/細別/名称）に対して名称→細別→種別→工種の順でマッチングする。
 
     マッチング戦略:
-      1. 各レベルで suryo⊂DB 方向を優先し、該当なしなら DB⊂suryo をフォールバック
-      2. マッチ数が _MAX_CHAIN_MATCHES を超えた場合、深い階層のキーワードで絞り込む
-      3. 絞り込めなければそのレベルをスキップして上位へ遡る
+      1. 最も深いレベルからマッチングを試み、最初に「有効な結果」が得られたレベルで確定
+         (a) suryo⊂DB を優先、なければ DB⊂suryo をフォールバック
+         (b) それでも 0件なら kojyo_alias で補完（語順違い・別名等）
+      2. 複数候補が残った場合、浅い階層のキーワードでアルゴリズム絞り込み
+      3. さらに残った場合、NARROWING_TABLE で絞り込み（部分一致でテーブルキーを照合）
+      4. 絞り込み後も _MAX_AFTER_NARROW を超える場合は汎用キーワードと判断して次のレベルへ
+         ※ 盲目的な閾値スキップではなく「全絞り込みを試みた後の最終判断」として遡行する
 
     Returns:
         (matched_kojyo_list, matched_level_name)
     """
-    # 全レベルの正規化済みキーワードを事前収集
     ctx: dict[str, str] = {}
     for lvl in SURYO_LEVEL_COLS:
         v = chain.get(lvl, "")
         if v and len(_normalize(v)) >= 2:
             ctx[lvl] = _normalize(v)
 
+    norm_alias     = _get_norm_alias()
+    norm_narrowing = _get_norm_narrowing()
+    ctx_vals       = list(ctx.values())
+
     for level in reversed(SURYO_LEVEL_COLS):
         if level not in ctx:
             continue
         norm_val = ctx[level]
 
-        # (a) suryo ⊂ DB（キーワードがDB工種名に含まれる）
+        # Step 1a: アルゴリズムマッチング（suryo⊂DB 優先、DB⊂suryo フォールバック）
         matches = [k for k, nk in norm_db if norm_val in nk]
-        # (b) フォールバック: DB ⊂ suryo（修飾語付きキーワードから基幹工種を検出）
         if not matches:
             matches = [k for k, nk in norm_db if nk in norm_val]
+
+        # Step 1b: kojyo_alias 補完（語順違い・別名で 0件の場合）
+        if not matches:
+            alias_norms = norm_alias.get(norm_val, set())
+            matches = [k for k, nk in norm_db if nk in alias_norms]
 
         if not matches:
             continue
 
-        # 閾値以下ならそのまま返す
-        if len(matches) <= _MAX_CHAIN_MATCHES:
-            return matches, level
-
-        # 閾値超過 → 深い階層キーワードで絞り込みを試みる
+        # Step 2a: 浅い階層キーワードでアルゴリズム絞り込み
         lvl_idx = SURYO_LEVEL_COLS.index(level)
-        deeper_norms = [v for l, v in ctx.items()
-                        if SURYO_LEVEL_COLS.index(l) > lvl_idx]
-        if deeper_norms:
-            narrowed = _narrow_with_context(matches, deeper_norms, norm_db)
-            # 絞り込みが元の半分以下 or 閾値以下なら採用
-            if narrowed and (len(narrowed) <= _MAX_CHAIN_MATCHES
-                            or len(narrowed) <= len(matches) // 2):
-                return narrowed, level
+        shallower_norms = [v for l, v in ctx.items()
+                           if SURYO_LEVEL_COLS.index(l) < lvl_idx]
+        if shallower_norms and len(matches) > 1:
+            narrowed = _narrow_with_shallower(matches, shallower_norms)
+            if narrowed:
+                matches = narrowed
 
-        # 絞り込み失敗 → このレベルをスキップして上位へ
-        continue
+        # Step 2b: NARROWING_TABLE で追加絞り込み
+        # テーブルキーが ctx のいずれかの値の部分文字列であれば適用
+        if len(matches) > 1:
+            for kw_norm, allowed_norms in norm_narrowing.items():
+                if any(kw_norm in cv for cv in ctx_vals):
+                    filtered = [k for k in matches if _normalize(k) in allowed_norms]
+                    if filtered:
+                        matches = filtered
+                        break
+
+        # Step 3: 全絞り込み後も多すぎる場合は次のレベルへ遡る
+        if len(matches) > _MAX_AFTER_NARROW:
+            continue
+
+        return matches, level
 
     return [], ""
 
@@ -1116,7 +1160,12 @@ def build_match_detail(
         return pd.DataFrame(columns=out_cols)
 
     norm_d = [(k, _normalize(k)) for k in db_dekigata_df["工種"].unique()  if len(_normalize(k)) >= 2]
-    norm_h = [(k, _normalize(k)) for k in db_hinshitsu_df["工種"].unique() if len(_normalize(k)) >= 2]
+
+    # 品管: 試験区分=必須 の工種のみをマッチング対象とする
+    hin_hissu_kojyo = set(
+        db_hinshitsu_df[db_hinshitsu_df["試験区分"] == "必須"]["工種"].unique()
+    )
+    norm_h = [(k, _normalize(k)) for k in hin_hissu_kojyo if len(_normalize(k)) >= 2]
 
     # 間接トリガーで追加すべき品質管理工種（プロジェクト全体レベル）
     implicit_h = _get_implicit_hinshitsu(suryo_df, db_hinshitsu_df)
