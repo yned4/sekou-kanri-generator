@@ -958,7 +958,7 @@ def _render_matching():
                         body   = _card_html(db_rows_d[i], _DISP_D, diff_d)
                         st.markdown(
                             f'<div class="cand-card" style="{brd}">'
-                            f'<div class="cand-card-title">候補{chr(65+i)}：{ctitle}</div>'
+                            f'<div class="cand-card-title">{i+1}. {ctitle}</div>'
                             f'<div class="cand-card-body">{body}</div>'
                             f'</div>',
                             unsafe_allow_html=True,
@@ -1828,7 +1828,7 @@ def _render_help():
         st.markdown("""
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:6px 0 18px;">
   <div style="background:#FBEBEC;border:1.5px solid #C01820;border-radius:6px;padding:14px;">
-    <div style="font-size:.85rem;font-weight:700;color:#2C2C2A;margin-bottom:8px;">候補A：○○工（機械掘削）　✓ 採用中</div>
+    <div style="font-size:.85rem;font-weight:700;color:#2C2C2A;margin-bottom:8px;">1. ○○工（機械掘削）　✓ 採用中</div>
     <div style="font-size:.80rem;color:#6B6A66;line-height:2.0;">
       <div>測定項目：幅・深さ・法長</div>
       <div>規格値：<span style="display:inline-block;background:#FBEBEC;color:#8E1119;border-radius:3px;padding:0 6px;font-size:.75rem;font-weight:600;">±50mm</span></div>
@@ -1836,7 +1836,7 @@ def _render_help():
     </div>
   </div>
   <div style="background:#FFF;border:1px solid #E5E3DC;border-radius:6px;padding:14px;">
-    <div style="font-size:.85rem;font-weight:700;color:#2C2C2A;margin-bottom:8px;">候補B：○○工（人力掘削）</div>
+    <div style="font-size:.85rem;font-weight:700;color:#2C2C2A;margin-bottom:8px;">2. ○○工（人力掘削）</div>
     <div style="font-size:.80rem;color:#6B6A66;line-height:2.0;">
       <div>測定項目：幅・深さ・法長</div>
       <div>規格値：<span style="display:inline-block;background:#FBEBEC;color:#8E1119;border-radius:3px;padding:0 6px;font-size:.75rem;font-weight:600;">±30mm</span></div>
@@ -1844,7 +1844,7 @@ def _render_help():
     </div>
   </div>
 </div>
-<p style="font-size:.80rem;color:#6B6A66;margin-top:-8px;">赤チップの項目が候補間で異なる差分です。工法に合った候補を選択してください。</p>
+<p style="font-size:.80rem;color:#6B6A66;margin-top:-8px;">赤チップの項目が候補間で異なる差分です。該当するものを複数選択できます。</p>
 """, unsafe_allow_html=True)
         st.markdown("""
 #### 確定の取り消し
