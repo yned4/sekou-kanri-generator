@@ -1094,7 +1094,8 @@ def get_implicit_hinshitsu_labels(suryo_df: pd.DataFrame, db_hinshitsu_df: pd.Da
     行選択状態に関わらず常に品管一覧に含めるために使用する。
     """
     kojyo_list = _get_implicit_hinshitsu(suryo_df, db_hinshitsu_df)
-    return _expand_hinshitsu_rows(kojyo_list, db_hinshitsu_df).split("\n") if kojyo_list else []
+    hissu_df = db_hinshitsu_df[db_hinshitsu_df["試験区分"] == "必須"]
+    return _expand_hinshitsu_rows(kojyo_list, hissu_df).split("\n") if kojyo_list else []
 
 
 def _get_implicit_hinshitsu(suryo_df: pd.DataFrame, db_hinshitsu_df: pd.DataFrame) -> list[str]:
@@ -1197,7 +1198,7 @@ def build_match_detail(
             "細別":          cd.get("細別", ""),
             "名称":          cd.get("名称", ""),
             "出来形マッチ":   _expand_to_rows(md, db_dekigata_df, ["測定項目"]),
-            "品質管理マッチ": _expand_hinshitsu_rows(all_mh, db_hinshitsu_df),
+            "品質管理マッチ": _expand_hinshitsu_rows(all_mh, db_hinshitsu_df[db_hinshitsu_df["試験区分"] == "必須"]),
             "撮影箇所マッチ": photo_match,
         })
 
