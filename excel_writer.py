@@ -41,6 +41,7 @@ FONT_NAME        = "ＭＳ 明朝" # 出力フォント（全角）
 MAX_COL_WIDTH    = 30          # 列幅の上限（文字数相当）
 MIN_COL_WIDTH    = 8           # 列幅の下限
 A_COL_WIDTH      = 4           # A列余白の幅（文字数相当）
+TATE_COL_WIDTH   = 4           # 縦書き列の幅（文字数相当）
 
 
 def _make_header_style() -> tuple:
@@ -60,14 +61,21 @@ def _make_thin_border() -> Border:
     return Border(left=thin, right=thin, top=thin, bottom=thin)
 
 
-def _merge_col_cells(ws, col_idx: int, data_start_row: int, data_end_row: int) -> None:
+def _merge_col_cells(ws, col_idx: int, data_start_row: int, data_end_row: int,
+                     tate: bool = False) -> None:
     """
     指定列の連続する同値セルを縦結合する。
     結合後は上端セルに値・スタイルを保持し、中央揃えにする。
+    tate=True の場合は縦書き（textRotation=255）を適用する。
     """
     if data_end_row < data_start_row:
         return
     thin = Side(style="thin", color="AAAAAA")
+    merged_align = (
+        Alignment(textRotation=255, horizontal="center", vertical="center")
+        if tate else
+        Alignment(horizontal="left", vertical="center", wrap_text=True)
+    )
 
     row = data_start_row
     while row <= data_end_row:
@@ -85,9 +93,7 @@ def _merge_col_cells(ws, col_idx: int, data_start_row: int, data_end_row: int) -
                 end_row=end_row, end_column=col_idx,
             )
             top_cell = ws.cell(row=row, column=col_idx)
-            top_cell.alignment = Alignment(
-                horizontal="left", vertical="center", wrap_text=True
-            )
+            top_cell.alignment = merged_align
             # 結合セルの外枠ボーダーを設定
             top_cell.border = Border(
                 left=thin, right=thin, top=thin, bottom=thin
@@ -102,6 +108,7 @@ def _write_sheet(
     section_col: Optional[str] = None,
     title: str = "",
     merge_cols: Optional[list] = None,
+    tate_cols: Optional[list] = None,
 ) -> None:
     """
     DataFrameを1シートに書き込む。
@@ -117,10 +124,13 @@ def _write_sheet(
     section_col: この列の値が変わるタイミングでセクション区切り行の背景色を変える。
     title: 行1 B列に表示するシート固有タイトル文字列。
     merge_cols: 連続する同値セルを縦結合する列名リスト。
+    tate_cols: 縦書き（textRotation=255）を適用する列名リスト（ヘッダー除く）。
     """
     header_font, header_fill, header_align = _make_header_style()
     data_align  = _make_data_align()
+    tate_align  = Alignment(textRotation=255, horizontal="center", vertical="center")
     thin_border = _make_thin_border()
+    tate_col_set = set(tate_cols or [])
 
     n_data_cols = len(df.columns)
 
@@ -185,12 +195,12 @@ def _write_sheet(
         a_cell.font   = Font(name=FONT_NAME, size=8)
         a_cell.border = thin_border
 
-        for col_idx, value in enumerate(row, start=2):  # B列=2
+        for col_idx, (col_name, value) in enumerate(zip(df.columns, row), start=2):  # B列=2
             if pd.isna(value) if not isinstance(value, str) else False:
                 value = ""
             cell = ws.cell(row=row_idx, column=col_idx, value=str(value) if value != "" else "")
             cell.font      = Font(name=FONT_NAME, size=8)
-            cell.alignment = data_align
+            cell.alignment = tate_align if col_name in tate_col_set else data_align
             cell.border    = thin_border
             if use_section_fill:
                 cell.fill = section_fill
@@ -203,14 +213,18 @@ def _write_sheet(
 
     for col_idx, col_name in enumerate(df.columns, start=2):  # B列=2
         col_letter = get_column_letter(col_idx)
-        max_len = len(str(col_name))
-        for value in df.iloc[:, col_idx - 2]:  # df列は0始まり
-            if pd.isna(value) if not isinstance(value, str) else False:
-                continue
-            cell_max = max((len(line) for line in str(value).split("\n")), default=0)
-            max_len = max(max_len, cell_max)
-        width = min(max(max_len + 2, MIN_COL_WIDTH), MAX_COL_WIDTH)
-        ws.column_dimensions[col_letter].width = width
+        if col_name in tate_col_set:
+            # 縦書き列は固定幅（内容の長さで広げない）
+            ws.column_dimensions[col_letter].width = TATE_COL_WIDTH
+        else:
+            max_len = len(str(col_name))
+            for value in df.iloc[:, col_idx - 2]:  # df列は0始まり
+                if pd.isna(value) if not isinstance(value, str) else False:
+                    continue
+                cell_max = max((len(line) for line in str(value).split("\n")), default=0)
+                max_len = max(max_len, cell_max)
+            width = min(max(max_len + 2, MIN_COL_WIDTH), MAX_COL_WIDTH)
+            ws.column_dimensions[col_letter].width = width
 
     # ── 指定列の縦セル結合 ────────────────────────────────────
     if merge_cols and len(df) > 0:
@@ -218,7 +232,8 @@ def _write_sheet(
         col_name_to_idx = {name: idx for idx, name in enumerate(df.columns, start=2)}
         for col_name in merge_cols:
             if col_name in col_name_to_idx:
-                _merge_col_cells(ws, col_name_to_idx[col_name], 6, data_end_row)
+                _merge_col_cells(ws, col_name_to_idx[col_name], 6, data_end_row,
+                                 tate=col_name in tate_col_set)
 
 
 
@@ -455,21 +470,21 @@ def _build_wb(df_d: pd.DataFrame, df_h: pd.DataFrame, df_p: pd.DataFrame) -> "Wo
 
     ws_h = wb.create_sheet(SHEET_HINSHITSU)
     _write_sheet(ws_h, df_h, title=_SHEET_TITLE[SHEET_HINSHITSU],
-                 merge_cols=["工種", "種別"])
+                 merge_cols=["工種", "種別"], tate_cols=["工種", "種別"])
 
     if len(df_d) > DEKIGATA_SPLIT_THRESHOLD:
         df_d1 = df_d.iloc[:DEKIGATA_SPLIT_THRESHOLD].reset_index(drop=True)
         df_d2 = df_d.iloc[DEKIGATA_SPLIT_THRESHOLD:].reset_index(drop=True)
         ws_d1 = wb.create_sheet(SHEET_DEKIGATA)
         _write_sheet(ws_d1, df_d1, title=_SHEET_TITLE[SHEET_DEKIGATA],
-                     merge_cols=["工種", "種別"])
+                     merge_cols=["工種", "種別"], tate_cols=["工種"])
         ws_d2 = wb.create_sheet(SHEET_DEKIGATA2)
         _write_sheet(ws_d2, df_d2, title=_SHEET_TITLE[SHEET_DEKIGATA2],
-                     merge_cols=["工種", "種別"])
+                     merge_cols=["工種", "種別"], tate_cols=["工種"])
     else:
         ws_d = wb.create_sheet(SHEET_DEKIGATA)
         _write_sheet(ws_d, df_d, title=_SHEET_TITLE[SHEET_DEKIGATA],
-                     merge_cols=["工種", "種別"])
+                     merge_cols=["工種", "種別"], tate_cols=["工種"])
 
     ws_p = wb.create_sheet(SHEET_PHOTO)
     _write_sheet(ws_p, df_p, title=_SHEET_TITLE[SHEET_PHOTO])
