@@ -720,6 +720,7 @@ def build_suryo_match_map(suryo_keywords: list, kojyo_list: list) -> dict:
     for kojyo in kojyo_list:
         norm_kojyo = _normalize(kojyo)
         for suryo_kw, norm_kw in norm_kws.items():
+            # suryo ⊂ DB を優先、フォールバックで DB ⊂ suryo
             if norm_kw in norm_kojyo or norm_kojyo in norm_kw:
                 result[kojyo] = suryo_kw
                 break
@@ -814,42 +815,92 @@ def suggest_from_suryo_hierarchy(
 
     suggested: set = set()
 
-    # ユニークな階層チェーンを処理
+    # ユニークな階層チェーンを処理（_match_chain に委譲）
     chains = suryo_df[SURYO_LEVEL_COLS].drop_duplicates()
-
     for _, chain in chains.iterrows():
-        # 名称→細別→種別→工種の順（深い→浅い）で照合
-        for level in reversed(SURYO_LEVEL_COLS):
-            val = chain.get(level, "")
-            if not val or len(_normalize(val)) < 2:
-                continue
-            norm_val = _normalize(val)
-            matches = [
-                k for k, nk in norm_db
-                if norm_val in nk or nk in norm_val
-            ]
-            if matches:
-                suggested.update(matches)
-                break   # このチェーンはここで解決。上位レベルには遡らない
+        matched, _ = _match_chain(chain.to_dict(), norm_db)
+        suggested.update(matched)
 
     return sorted(suggested)
+
+
+# 1レベルで許容する最大マッチ数。超過時は階層文脈で絞り込みを試みる。
+_MAX_CHAIN_MATCHES = 10
+
+
+def _narrow_with_context(matches, deeper_norms, norm_db):
+    """
+    matches を深い階層キーワードでチェーン式に絞り込む。
+
+    deeper_norms を順に適用し、各キーワードで段階的にプレフィックスを短縮。
+    前段の絞り込み結果を次段に渡して累積的に絞る。
+    """
+    current = [(k, _normalize(k)) for k in matches]
+    narrowed = False
+
+    for dn in deeper_norms:
+        for end in range(len(dn), 1, -1):
+            prefix = dn[:end]
+            filtered = [(k, nk) for k, nk in current if prefix in nk]
+            if filtered and len(filtered) < len(current):
+                current = filtered
+                narrowed = True
+                break  # このキーワードでの絞り込み完了、次のキーワードへ
+
+    return [k for k, _ in current] if narrowed else None
 
 
 def _match_chain(chain: dict, norm_db: list) -> tuple:
     """
     1チェーン（工種/種別/細別/名称）に対して名称→細別→種別→工種の順でマッチングする。
 
+    マッチング戦略:
+      1. 各レベルで suryo⊂DB 方向を優先し、該当なしなら DB⊂suryo をフォールバック
+      2. マッチ数が _MAX_CHAIN_MATCHES を超えた場合、深い階層のキーワードで絞り込む
+      3. 絞り込めなければそのレベルをスキップして上位へ遡る
+
     Returns:
         (matched_kojyo_list, matched_level_name)
     """
+    # 全レベルの正規化済みキーワードを事前収集
+    ctx: dict[str, str] = {}
+    for lvl in SURYO_LEVEL_COLS:
+        v = chain.get(lvl, "")
+        if v and len(_normalize(v)) >= 2:
+            ctx[lvl] = _normalize(v)
+
     for level in reversed(SURYO_LEVEL_COLS):
-        val = chain.get(level, "")
-        if not val or len(_normalize(val)) < 2:
+        if level not in ctx:
             continue
-        norm_val = _normalize(val)
-        matches = [k for k, nk in norm_db if norm_val in nk or nk in norm_val]
-        if matches:
+        norm_val = ctx[level]
+
+        # (a) suryo ⊂ DB（キーワードがDB工種名に含まれる）
+        matches = [k for k, nk in norm_db if norm_val in nk]
+        # (b) フォールバック: DB ⊂ suryo（修飾語付きキーワードから基幹工種を検出）
+        if not matches:
+            matches = [k for k, nk in norm_db if nk in norm_val]
+
+        if not matches:
+            continue
+
+        # 閾値以下ならそのまま返す
+        if len(matches) <= _MAX_CHAIN_MATCHES:
             return matches, level
+
+        # 閾値超過 → 深い階層キーワードで絞り込みを試みる
+        lvl_idx = SURYO_LEVEL_COLS.index(level)
+        deeper_norms = [v for l, v in ctx.items()
+                        if SURYO_LEVEL_COLS.index(l) > lvl_idx]
+        if deeper_norms:
+            narrowed = _narrow_with_context(matches, deeper_norms, norm_db)
+            # 絞り込みが元の半分以下 or 閾値以下なら採用
+            if narrowed and (len(narrowed) <= _MAX_CHAIN_MATCHES
+                            or len(narrowed) <= len(matches) // 2):
+                return narrowed, level
+
+        # 絞り込み失敗 → このレベルをスキップして上位へ
+        continue
+
     return [], ""
 
 
@@ -1124,7 +1175,7 @@ def suggest_matches(suryo_keywords: list, kojyo_list: list) -> list:
     for kojyo in kojyo_list:
         norm_kojyo = _normalize(kojyo)
         for norm_kw in norm_kws:
-            # 双方向部分一致
+            # suryo ⊂ DB を優先、フォールバックで DB ⊂ suryo
             if norm_kw in norm_kojyo or norm_kojyo in norm_kw:
                 suggested.append(kojyo)
                 break
