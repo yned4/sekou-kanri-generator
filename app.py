@@ -1532,8 +1532,8 @@ def _render_output():
 
     if n_yo > 0:
         confirmed = sum(
-            1 for i, (_, r) in enumerate(df_tmp.iterrows())
-            if r["状態"] == "要選択" and _chain_key(r) in st.session_state.row_selections
+            1 for _, r in df_tmp.iterrows()
+            if r["状態"] == "要選択" and _chain_key(r) in st.session_state.confirmed_keys
         )
         st.info(f"要選択 {n_yo} 件中 {confirmed} 件が確定済みです。未確認の {n_yo - confirmed} 件は全候補を自動採用します。"
                 f"　→ ③マッチングで確認できます。")
