@@ -1034,30 +1034,94 @@ def _expand_photo_rows(
 
     label = "撮影箇所の工種名 / 撮影項目" 形式、改行区切り。
     出来形管理セクションと品質管理セクションの両方を検索する。
+
+    マッチング手順:
+      1. _normalize() による部分一致（従来ロジック）
+      2. photo_alias.json による対応表フォールバック
     """
+    from photo_alias import resolve_photo_targets, get_implicit_photo_kojyo
+
     labels: list = []
     seen: set = set()
 
-    norm_d = [_normalize(k) for k in matched_kojyo_d if k and len(_normalize(k)) >= 2]
-    norm_h = [_normalize(k) for k in matched_kojyo_h if k and len(_normalize(k)) >= 2]
+    def _add_row(r) -> None:
+        kojyo_val = str(r.get("工種", "") or "").strip()
+        item = str(r.get("撮影項目", "") or "").strip()
+        label = f"{kojyo_val} / {item}" if item else kojyo_val
+        if label not in seen:
+            labels.append(label)
+            seen.add(label)
 
-    def _add_from_section(df_section: pd.DataFrame, norm_keys: list) -> None:
-        for _, r in df_section.iterrows():
-            kojyo_val = str(r.get("工種", "") or "").strip()
-            nv = _normalize(kojyo_val)
-            if not nv:
-                continue
+    def _add_from_section(
+        df_section: pd.DataFrame,
+        raw_keys: list,
+        section_name: str,
+    ) -> None:
+        norm_keys = [_normalize(k) for k in raw_keys if k and len(_normalize(k)) >= 2]
+        if not norm_keys:
+            return
+
+        # 撮影箇所DBの各行を正規化値でインデックス化（一度だけ）
+        photo_norms: list[tuple[str, int]] = []
+        for idx, r in df_section.iterrows():
+            nv = _normalize(str(r.get("工種", "") or ""))
+            if nv:
+                photo_norms.append((nv, idx))
+
+        # Step 1: 従来の部分一致マッチング
+        matched_photo_norms: set[str] = set()
+        for nv, idx in photo_norms:
             if any(nv in nk or nk in nv for nk in norm_keys):
-                item = str(r.get("撮影項目", "") or "").strip()
-                label = f"{kojyo_val} / {item}" if item else kojyo_val
-                if label not in seen:
-                    labels.append(label)
-                    seen.add(label)
+                _add_row(df_section.loc[idx])
+                matched_photo_norms.add(nv)
 
-    if norm_d:
-        _add_from_section(photo_df[photo_df["セクション"] == "出来形管理"], norm_d)
-    if norm_h:
-        _add_from_section(photo_df[photo_df["セクション"] == "品質管理"], norm_h)
+        # Step 2: 対応表フォールバック
+        # Step 1 でマッチしなかった撮影箇所DB行を、対応表経由で補完する
+        for raw_key in raw_keys:
+            if not raw_key:
+                continue
+            alias_targets = resolve_photo_targets(raw_key, section_name)
+            for target in alias_targets:
+                nt = _normalize(target)
+                if not nt:
+                    continue
+                for nv, idx in photo_norms:
+                    if nv in matched_photo_norms:
+                        continue
+                    if nv in nt or nt in nv:
+                        _add_row(df_section.loc[idx])
+                        matched_photo_norms.add(nv)
+
+    _add_from_section(
+        photo_df[photo_df["セクション"] == "出来形管理"],
+        matched_kojyo_d,
+        "出来形管理",
+    )
+    _add_from_section(
+        photo_df[photo_df["セクション"] == "品質管理"],
+        matched_kojyo_h,
+        "品質管理",
+    )
+
+    # Step 3: implicit_photo ルールによる品質管理写真の追加
+    # matched_kojyo_d/h に「河川土工」等がある場合、
+    # 撮影箇所の品質管理セクションから「セメント・コンクリート」等を追加取得する
+    implicit_kojyo = get_implicit_photo_kojyo(matched_kojyo_d, matched_kojyo_h)
+    if implicit_kojyo:
+        df_hinshitsu = photo_df[photo_df["セクション"] == "品質管理"]
+        photo_norms_h: list[tuple[str, int]] = []
+        for idx, r in df_hinshitsu.iterrows():
+            nv = _normalize(str(r.get("工種", "") or ""))
+            if nv:
+                photo_norms_h.append((nv, idx))
+
+        for ik in implicit_kojyo:
+            nik = _normalize(ik)
+            if not nik:
+                continue
+            for nv, idx in photo_norms_h:
+                if nv in nik or nik in nv:
+                    _add_row(df_hinshitsu.loc[idx])
 
     return "\n".join(labels)
 
