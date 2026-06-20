@@ -832,24 +832,22 @@ _norm_narrowing_cache = None
 def _get_norm_alias():
     """kojyo_alias.ALIAS_B_TO_A を正規化済みキーで再構築したキャッシュを返す。"""
     global _norm_alias_cache
-    if _norm_alias_cache is None:
-        from kojyo_alias import ALIAS_B_TO_A
-        _norm_alias_cache = {
-            _normalize(k): {_normalize(v) for v in vals}
-            for k, vals in ALIAS_B_TO_A.items()
-        }
+    from kojyo_alias import ALIAS_B_TO_A
+    _norm_alias_cache = {
+        _normalize(k): {_normalize(v) for v in vals}
+        for k, vals in ALIAS_B_TO_A.items()
+    }
     return _norm_alias_cache
 
 
 def _get_norm_narrowing():
     """match_filter.NARROWING_TABLE を正規化済みキーで再構築したキャッシュを返す。"""
     global _norm_narrowing_cache
-    if _norm_narrowing_cache is None:
-        from match_filter import NARROWING_TABLE
-        _norm_narrowing_cache = {
-            _normalize(k): {_normalize(v) for v in vals}
-            for k, vals in NARROWING_TABLE.items()
-        }
+    from match_filter import NARROWING_TABLE
+    _norm_narrowing_cache = {
+        _normalize(k): {_normalize(v) for v in vals}
+        for k, vals in NARROWING_TABLE.items()
+    }
     return _norm_narrowing_cache
 
 
