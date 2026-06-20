@@ -14,6 +14,7 @@ import pandas as pd
 import streamlit as st
 
 import db
+import photo_alias as pa
 
 from extractor import (
     extract_suryo,
@@ -497,6 +498,9 @@ with st.sidebar:
     if st.button("基準DB確認", use_container_width=True,
                  type="primary" if page=="db_view" else "secondary", key="nav_db"):
         st.session_state.page = "db_view"; st.rerun()
+    if st.button("対応表編集", use_container_width=True,
+                 type="primary" if page=="alias_edit" else "secondary", key="nav_alias"):
+        st.session_state.page = "alias_edit"; st.rerun()
     if st.button("使い方", use_container_width=True,
                  type="primary" if page=="help" else "secondary", key="nav_help"):
         st.session_state.page = "help"; st.rerun()
@@ -2027,6 +2031,120 @@ def _render_db_view():
         _render_db_tab(kojyo_data["撮影箇所"], "p", keyword)
 
 # ===========================================================================
+# 対応表編集
+# ===========================================================================
+def _render_alias_editor():
+    """撮影箇所マッチング対応表 (photo_alias.json) の閲覧・編集 UI。"""
+    st.markdown(
+        '<div class="page-card">'
+        '<div class="page-card-title">撮影箇所マッチング 対応表</div>'
+        '<div class="page-card-sub">photo_alias.json — 工種名の対応関係を定義</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── JSON 読み込み ──────────────────────────────────────
+    alias_path = pa._JSON_PATH
+    if alias_path.exists():
+        with open(alias_path, encoding="utf-8") as f:
+            raw = json.load(f)
+    else:
+        raw = {"出来形管理": {}, "品質管理": {}, "implicit_photo": {}}
+
+    def _save(data: dict):
+        with open(alias_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        pa.reload()
+
+    # ── タブ ───────────────────────────────────────────────
+    sections = [
+        ("出来形管理",      "出来形管理",  "出来形管理DB工種 → 撮影箇所DB工種"),
+        ("品質管理",        "品質管理",    "品質管理DB工種 → 撮影箇所DB工種"),
+        ("implicit_photo", "撮影箇所",    "キーワード部分一致 → 品質管理写真の追加工種"),
+    ]
+    tabs = st.tabs([s[1] for s in sections])
+
+    for tab, (sec_key, _tab_label, sec_desc) in zip(tabs, sections):
+        with tab:
+            st.caption(sec_desc)
+            entries = {k: v for k, v in raw.get(sec_key, {}).items()
+                       if not k.startswith("_")}
+
+            # ── 既存エントリ一覧 ───────────────────────
+            if entries:
+                rows = []
+                for src, targets in entries.items():
+                    tgt_str = "、".join(targets) if isinstance(targets, list) else str(targets)
+                    rows.append({"変換元（工種名）": src, "変換先（撮影箇所DB工種名）": tgt_str})
+                df_alias = pd.DataFrame(rows)
+                st.dataframe(df_alias, use_container_width=True, hide_index=True,
+                             height=min(40 + 35 * len(rows), 500))
+            else:
+                st.info("登録されたエントリはありません。")
+
+            st.divider()
+
+            # ── エントリ追加 ───────────────────────────
+            st.markdown("**エントリを追加**")
+            c1, c2 = st.columns(2)
+            with c1:
+                new_src = st.text_input(
+                    "変換元（工種名）",
+                    key=f"alias_new_src_{sec_key}",
+                    placeholder="例: コンクリート擁壁工",
+                )
+            with c2:
+                new_tgt = st.text_input(
+                    "変換先（カンマ区切りで複数可）",
+                    key=f"alias_new_tgt_{sec_key}",
+                    placeholder="例: 場所打擁壁工, コンクリート側壁工",
+                )
+            if st.button("追加", key=f"alias_add_{sec_key}", type="primary"):
+                src = new_src.strip()
+                tgt = [t.strip() for t in new_tgt.split(",") if t.strip()]
+                if not src or not tgt:
+                    st.warning("変換元と変換先の両方を入力してください。")
+                else:
+                    section_data = raw.setdefault(sec_key, {})
+                    if src in section_data:
+                        st.warning(f"「{src}」は既に登録されています。削除してから再度追加してください。")
+                    else:
+                        section_data[src] = tgt
+                        _save(raw)
+                        st.toast(f"「{src}」を追加しました")
+                        st.rerun()
+
+            st.divider()
+
+            # ── エントリ削除 ───────────────────────────
+            st.markdown("**エントリを削除**")
+            if entries:
+                del_key = st.selectbox(
+                    "削除する変換元を選択",
+                    list(entries.keys()),
+                    key=f"alias_del_{sec_key}",
+                )
+                if st.button("削除", key=f"alias_del_btn_{sec_key}"):
+                    section_data = raw.get(sec_key, {})
+                    if del_key in section_data:
+                        del section_data[del_key]
+                        _save(raw)
+                        st.toast(f"「{del_key}」を削除しました")
+                        st.rerun()
+            else:
+                st.caption("削除可能なエントリはありません。")
+
+    # ── JSON ダウンロード ──────────────────────────────────
+    st.divider()
+    st.download_button(
+        "対応表 JSON をダウンロード",
+        data=json.dumps(raw, ensure_ascii=False, indent=2),
+        file_name="photo_alias.json",
+        mime="application/json",
+    )
+
+
+# ===========================================================================
 # ルーティング
 # ===========================================================================
 page = st.session_state.page
@@ -2035,6 +2153,8 @@ if page == "help":
     _render_help()
 elif page == "db_view":
     _render_db_view()
+elif page == "alias_edit":
+    _render_alias_editor()
 elif page == "project_mgmt":
     _render_project_mgmt()
 elif page == "project_edit":
