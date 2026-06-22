@@ -14,6 +14,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+import auth
 import db
 import photo_alias as pa
 import kojyo_alias as ka
@@ -345,6 +346,7 @@ if "excel_fname"     not in st.session_state: st.session_state["excel_fname"]   
 if "project_sheets"  not in st.session_state: st.session_state["project_sheets"]  = None
 if "pm_editing"      not in st.session_state: st.session_state["pm_editing"]      = None
 if "pm_renaming"     not in st.session_state: st.session_state["pm_renaming"]     = None
+if "current_user"    not in st.session_state: st.session_state["current_user"]    = None
 
 # ===========================================================================
 # ヘルパー
@@ -451,6 +453,49 @@ def _get_df_raw():
     return df
 
 # ===========================================================================
+# ログインゲート
+# ===========================================================================
+def _render_login():
+    """ログインページ。"""
+    st.markdown(
+        '<div style="max-width:400px;margin:80px auto;padding:40px;'
+        'background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.08);">'
+        '<div style="font-size:1.2rem;font-weight:800;text-align:center;'
+        'margin-bottom:8px;color:#1A2332;">施工管理計画</div>'
+        '<div style="font-size:.75rem;color:#9A9893;text-align:center;'
+        'margin-bottom:28px;">Automated Planning System</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+    with st.container():
+        col_l, col_c, col_r = st.columns([1, 2, 1])
+        with col_c:
+            with st.form("login_form"):
+                username = st.text_input("ユーザー名", key="login_username")
+                password = st.text_input("パスワード", type="password", key="login_password")
+                submitted = st.form_submit_button("ログイン", use_container_width=True, type="primary")
+                if submitted:
+                    if not username or not password:
+                        st.error("ユーザー名とパスワードを入力してください。")
+                    else:
+                        user = auth.authenticate(username.strip(), password)
+                        if user:
+                            st.session_state.current_user = user
+                            st.rerun()
+                        else:
+                            st.error("ユーザー名またはパスワードが正しくありません。")
+
+if auth.is_available() and st.session_state.current_user is None:
+    _render_login()
+    st.stop()
+
+# 現在のユーザー情報（ログイン不要時はNone）
+_current_user = st.session_state.current_user
+_user_role = _current_user["role"] if _current_user else "admin"
+_is_admin = _user_role == "admin"
+_is_viewer = _user_role == "viewer"
+
+# ===========================================================================
 # サイドバー
 # ===========================================================================
 with st.sidebar:
@@ -498,12 +543,17 @@ with st.sidebar:
         st.session_state.pm_editing = None
         st.session_state.pm_renaming = None
         st.session_state.page = "project_mgmt"; st.rerun()
+    if _is_admin:
+        if st.button("ユーザー管理", use_container_width=True,
+                     type="primary" if page=="user_mgmt" else "secondary", key="nav_user"):
+            st.session_state.page = "user_mgmt"; st.rerun()
     if st.button("基準DB確認", use_container_width=True,
                  type="primary" if page=="db_view" else "secondary", key="nav_db"):
         st.session_state.page = "db_view"; st.rerun()
-    if st.button("対応表編集", use_container_width=True,
-                 type="primary" if page=="alias_edit" else "secondary", key="nav_alias"):
-        st.session_state.page = "alias_edit"; st.rerun()
+    if not _is_viewer:
+        if st.button("対応表編集", use_container_width=True,
+                     type="primary" if page=="alias_edit" else "secondary", key="nav_alias"):
+            st.session_state.page = "alias_edit"; st.rerun()
     if st.button("使い方", use_container_width=True,
                  type="primary" if page=="help" else "secondary", key="nav_help"):
         st.session_state.page = "help"; st.rerun()
@@ -519,8 +569,9 @@ with st.sidebar:
     st.divider()
 
     if st.button("↺  リセット", use_container_width=True, key="btn_reset"):
+        _saved_user = st.session_state.get("current_user")
         for k in list(st.session_state.keys()):
-            if k != "page": del st.session_state[k]
+            if k not in ("page", "current_user"): del st.session_state[k]
         st.session_state.suryo_info = st.session_state.df_match = \
             st.session_state.selected_idx = None
         st.session_state.row_selections  = {}
@@ -528,8 +579,20 @@ with st.sidebar:
         st.session_state.excel_cache = st.session_state.excel_fname = None
         st.session_state.project_sheets = None
         st.session_state.pm_editing = None
+        st.session_state.current_user = _saved_user
         st.session_state.page = "upload"
         st.rerun()
+
+    # ─ ユーザー情報 ────────────────────────────────────────────
+    if _current_user:
+        _role_labels = {"admin": "管理者", "editor": "編集者", "viewer": "閲覧者"}
+        st.divider()
+        st.caption(f"ログイン: {_current_user['display_name'] or _current_user['username']}")
+        st.caption(f"権限: {_role_labels.get(_user_role, _user_role)}")
+        if st.button("ログアウト", use_container_width=True, key="btn_logout"):
+            st.session_state.current_user = None
+            st.session_state.page = "upload"
+            st.rerun()
 
 # ===========================================================================
 # ① 取込ページ
@@ -1222,8 +1285,8 @@ def _row_label(df: pd.DataFrame, i: int) -> str:
     return f"{i + 1}行目　{preview}"
 
 
-def _render_sheet_editor(kojyo_name: str, sheets: dict):
-    """指定プロジェクトのシート編集UI（3タブ）。"""
+def _render_sheet_editor(kojyo_name: str, sheets: dict, readonly: bool = False):
+    """指定プロジェクトのシート編集UI（3タブ）。readonly=True で閲覧専用。"""
     safe = re.sub(r'[\\/:*?"<>|　 ]', '_', kojyo_name) if kojyo_name else "project"
     fname = f"施工管理計画_{safe}.xlsx" if safe else "施工管理計画.xlsx"
 
@@ -1267,6 +1330,10 @@ def _render_sheet_editor(kojyo_name: str, sheets: dict):
             df = df[ordered_cols + extra_cols]
             n = len(df)
             cols = list(df.columns)
+
+            if readonly:
+                st.dataframe(df, use_container_width=True, hide_index=False)
+                continue
 
             op_edit, op_add, op_del = st.tabs(["データ編集", "行を追加", "行を削除"])
 
@@ -1391,7 +1458,11 @@ def _render_project_mgmt():
     editing_name = st.session_state.get("pm_editing")
     editing_sheets = st.session_state.get("project_sheets") if editing_name else None
 
-    proj_list = db.list_projects() if db.is_available() else []
+    _u = _current_user
+    _uid = _u["id"] if _u else None
+    _urole = _u["role"] if _u else "admin"
+    proj_data = db.list_projects(user_id=_uid, role=_urole) if db.is_available() else []
+    proj_list = [r["kojyo_name"] for r in proj_data]
 
     si = st.session_state.get("suryo_info") or {}
     current_name = si.get("工事名", "")
@@ -1432,6 +1503,7 @@ def _render_project_mgmt():
                             st.rerun()
                 else:
                     # ── 通常行 ─────────────────────────────
+                    # viewer: 名前のみ表示、editor: 名前+開く、admin: 全操作
                     name_col, btn_col = st.columns([7, 3])
                     with name_col:
                         if st.button(pname, key=f"pm_open_{pname}", use_container_width=True):
@@ -1449,17 +1521,19 @@ def _render_project_mgmt():
                             st.session_state.page = "project_edit"
                             st.rerun()
                     with btn_col:
-                        rc1, rc2 = st.columns(2)
-                        with rc1:
-                            if st.button("名前を変更", key=f"pm_rename_{pname}", use_container_width=True):
-                                st.session_state.pm_renaming = pname
-                                st.rerun()
-                        with rc2:
-                            if st.button("削除", key=f"pm_del_{pname}", use_container_width=True):
-                                if db.is_available():
-                                    db.delete_project(pname)
-                                st.toast(f"「{pname}」を削除しました")
-                                st.rerun()
+                        if not _is_viewer:
+                            rc1, rc2 = st.columns(2)
+                            with rc1:
+                                if st.button("名前を変更", key=f"pm_rename_{pname}", use_container_width=True):
+                                    st.session_state.pm_renaming = pname
+                                    st.rerun()
+                            with rc2:
+                                if _is_admin:
+                                    if st.button("削除", key=f"pm_del_{pname}", use_container_width=True):
+                                        if db.is_available():
+                                            db.delete_project(pname)
+                                        st.toast(f"「{pname}」を削除しました")
+                                        st.rerun()
 
 
 def _render_project_edit():
@@ -1485,7 +1559,154 @@ def _render_project_edit():
         return
 
     with st.container(border=True):
-        _render_sheet_editor(editing_name, editing_sheets)
+        _render_sheet_editor(editing_name, editing_sheets, readonly=_is_viewer)
+
+
+# ===========================================================================
+# ユーザー管理ページ（admin のみ）
+# ===========================================================================
+def _render_user_mgmt():
+    """ユーザー管理ページ。"""
+    st.markdown(
+        '<div class="page-card">'
+        '<div class="page-card-title">ユーザー管理</div>'
+        '<div class="page-card-sub">ユーザーの追加・編集・削除、プロジェクト閲覧権限の設定</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    if not _is_admin:
+        st.warning("管理者権限が必要です。")
+        return
+
+    tab_users, tab_perms = st.tabs(["ユーザー一覧", "プロジェクト権限"])
+
+    # ── ユーザー一覧タブ ─────────────────────────────────────
+    with tab_users:
+        users = auth.list_users()
+        _role_labels = {"admin": "管理者", "editor": "編集者", "viewer": "閲覧者"}
+
+        if users:
+            for u in users:
+                with st.container(border=True):
+                    c1, c2, c3 = st.columns([4, 2, 2])
+                    with c1:
+                        st.markdown(f"**{u['display_name'] or u['username']}**")
+                        st.caption(f"@{u['username']}　{_role_labels.get(u['role'], u['role'])}")
+                    with c2:
+                        if st.button("編集", key=f"ue_{u['id']}", use_container_width=True):
+                            st.session_state["editing_user_id"] = u["id"]
+                            st.rerun()
+                    with c3:
+                        # 自分自身は削除不可
+                        is_self = _current_user and u["id"] == _current_user["id"]
+                        if st.button("削除", key=f"ud_{u['id']}", use_container_width=True,
+                                     disabled=is_self):
+                            auth.delete_user(u["id"])
+                            st.toast(f"「{u['username']}」を削除しました")
+                            st.rerun()
+
+                    # 編集フォーム（インライン展開）
+                    if st.session_state.get("editing_user_id") == u["id"]:
+                        with st.form(f"user_edit_form_{u['id']}"):
+                            new_display = st.text_input("表示名", value=u["display_name"],
+                                                        key=f"ue_dn_{u['id']}")
+                            new_role = st.selectbox(
+                                "権限", ["admin", "editor", "viewer"],
+                                index=["admin", "editor", "viewer"].index(u["role"]),
+                                format_func=lambda x: _role_labels.get(x, x),
+                                key=f"ue_role_{u['id']}")
+                            new_pw = st.text_input("新しいパスワード（変更する場合のみ）",
+                                                   type="password", key=f"ue_pw_{u['id']}")
+                            fc1, fc2 = st.columns(2)
+                            with fc1:
+                                if st.form_submit_button("保存", type="primary", use_container_width=True):
+                                    auth.update_user(
+                                        u["id"],
+                                        display_name=new_display,
+                                        role=new_role,
+                                        password=new_pw if new_pw else None,
+                                    )
+                                    st.session_state.pop("editing_user_id", None)
+                                    st.toast("ユーザー情報を更新しました")
+                                    st.rerun()
+                            with fc2:
+                                if st.form_submit_button("キャンセル", use_container_width=True):
+                                    st.session_state.pop("editing_user_id", None)
+                                    st.rerun()
+        else:
+            st.info("ユーザーが登録されていません。")
+
+        # ── 新規ユーザー追加 ─────────────────────────────────
+        st.divider()
+        st.markdown("##### 新規ユーザー追加")
+        with st.form("add_user_form", clear_on_submit=True):
+            ac1, ac2 = st.columns(2)
+            with ac1:
+                new_username = st.text_input("ユーザー名（ログインID）", key="au_name")
+            with ac2:
+                new_dispname = st.text_input("表示名", key="au_disp")
+            ac3, ac4 = st.columns(2)
+            with ac3:
+                new_password = st.text_input("パスワード", type="password", key="au_pw")
+            with ac4:
+                new_role = st.selectbox("権限", ["editor", "viewer", "admin"],
+                                        format_func=lambda x: _role_labels.get(x, x),
+                                        key="au_role")
+            if st.form_submit_button("追加", type="primary", use_container_width=True):
+                if not new_username or not new_password:
+                    st.error("ユーザー名とパスワードは必須です。")
+                elif auth.create_user(new_username.strip(), new_dispname.strip(),
+                                       new_password, new_role):
+                    st.toast(f"「{new_username}」を追加しました")
+                    st.rerun()
+                else:
+                    st.error("追加に失敗しました（ユーザー名が既に使用されている可能性があります）。")
+
+    # ── プロジェクト権限タブ ─────────────────────────────────
+    with tab_perms:
+        st.markdown("##### プロジェクト閲覧権限の割り当て")
+        st.caption("管理者は全プロジェクトにアクセスできるため、設定不要です。")
+
+        users = auth.list_users()
+        non_admin_users = [u for u in users if u["role"] != "admin"]
+
+        if not non_admin_users:
+            st.info("管理者以外のユーザーがいません。")
+        else:
+            proj_data = db.list_projects(role="admin") if db.is_available() else []
+            if not proj_data:
+                st.info("プロジェクトがありません。")
+            else:
+                proj_id_map = {p["kojyo_name"]: p["id"] for p in proj_data}
+                proj_names = list(proj_id_map.keys())
+
+                selected_user = st.selectbox(
+                    "ユーザーを選択",
+                    non_admin_users,
+                    format_func=lambda u: f"{u['display_name'] or u['username']} (@{u['username']}) — {_role_labels.get(u['role'], u['role'])}",
+                    key="perm_user_select",
+                )
+
+                if selected_user:
+                    current_perm_ids = set(auth.get_accessible_project_ids(selected_user["id"]))
+                    current_perm_names = [n for n, pid in proj_id_map.items()
+                                          if pid in current_perm_ids]
+
+                    with st.form("perm_form"):
+                        selected_projects = st.multiselect(
+                            "アクセス可能なプロジェクト",
+                            proj_names,
+                            default=current_perm_names,
+                            key="perm_projects",
+                        )
+                        if st.form_submit_button("権限を保存", type="primary",
+                                                 use_container_width=True):
+                            new_perm_ids = [proj_id_map[n] for n in selected_projects
+                                            if n in proj_id_map]
+                            auth.set_user_permissions(selected_user["id"], new_perm_ids)
+                            st.toast(f"「{selected_user['username']}」の権限を更新しました")
+                            st.rerun()
 
 
 def _render_output():
@@ -1596,6 +1817,11 @@ def _render_output():
                 st.session_state.pm_editing = proj_name  # 編集ページ用に保持
                 if db.is_available():
                     db.save_project(proj_name, dfs)
+                    # 非adminユーザーが作成した場合、自動で閲覧権限を付与
+                    if _current_user and not _is_admin:
+                        _pid = db.get_project_id(proj_name)
+                        if _pid:
+                            auth.add_permission(_current_user["id"], _pid)
                 st.success("生成完了！ダウンロードボタンからファイルを取得してください。「プロジェクト管理」で内容を編集できます。")
                 st.rerun()
             except Exception:
@@ -2233,6 +2459,8 @@ elif page == "project_mgmt":
     _render_project_mgmt()
 elif page == "project_edit":
     _render_project_edit()
+elif page == "user_mgmt":
+    _render_user_mgmt()
 elif page == "structure" and has_data:
     _render_structure()
 elif page in ("matching", "candidate") and has_data:

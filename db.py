@@ -96,18 +96,48 @@ def load_project(kojyo_name: str) -> dict[str, pd.DataFrame] | None:
     return None
 
 
-def list_projects() -> list[str]:
-    """保存済みプロジェクト名の一覧を返す（更新日時降順）。"""
+def list_projects(user_id: str | None = None, role: str | None = None) -> list[dict]:
+    """
+    保存済みプロジェクト一覧を返す（更新日時降順）。
+
+    user_id/role が指定された場合:
+      - admin: 全プロジェクト
+      - editor/viewer: project_permissions で許可されたもののみ
+
+    Returns:
+        [{"id": ..., "kojyo_name": ..., "updated_at": ...}, ...]
+    """
     client = _client()
     if client is None:
         return []
+
+    if role == "admin" or user_id is None:
+        res = (
+            client.table("projects")
+            .select("id, kojyo_name, updated_at")
+            .order("updated_at", desc=True)
+            .execute()
+        )
+        return res.data
+
+    # editor/viewer: 権限テーブルでフィルタ
+    from auth import get_accessible_project_ids
+    allowed_ids = get_accessible_project_ids(user_id)
+    if not allowed_ids:
+        return []
     res = (
         client.table("projects")
-        .select("kojyo_name, updated_at")
+        .select("id, kojyo_name, updated_at")
+        .in_("id", allowed_ids)
         .order("updated_at", desc=True)
         .execute()
     )
-    return [row["kojyo_name"] for row in res.data]
+    return res.data
+
+
+def list_project_names(user_id: str | None = None, role: str | None = None) -> list[str]:
+    """list_projects() の後方互換ラッパー。名前のリストのみ返す。"""
+    return [r["kojyo_name"] for r in list_projects(user_id=user_id, role=role)]
 
 
 def delete_project(kojyo_name: str) -> None:
@@ -128,3 +158,20 @@ def rename_project(old_name: str, new_name: str) -> bool:
     save_project(new_name, sheets)
     delete_project(old_name)
     return True
+
+
+def get_project_id(kojyo_name: str) -> str | None:
+    """プロジェクト名からIDを取得する。"""
+    client = _client()
+    if client is None:
+        return None
+    res = (
+        client.table("projects")
+        .select("id")
+        .eq("kojyo_name", kojyo_name)
+        .limit(1)
+        .execute()
+    )
+    if res.data:
+        return res.data[0]["id"]
+    return None
