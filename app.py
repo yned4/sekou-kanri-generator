@@ -144,6 +144,23 @@ button,input,select,textarea,th,td{
 }
 [data-testid="stDownloadButton"]>button:hover{background:#FBEBEC!important;}
 
+/* ── テキスト入力・セレクトボックス ────────────────────── */
+[data-testid="stTextInput"] input,
+[data-testid="stPasswordInput"] input,  /* パスワード入力欄にも適用 */
+[data-testid="stSelectbox"] [data-baseweb="select"],
+[data-testid="stMultiSelect"] [data-baseweb="select"],
+[data-testid="stTextArea"] textarea{
+    border:1.5px solid #C8C6C0!important;
+    border-radius:5px!important;
+    background:#FFF!important;
+}
+[data-testid="stTextInput"] input:focus,
+[data-testid="stPasswordInput"] input:focus,
+[data-testid="stTextArea"] textarea:focus{
+    border-color:#C01820!important;
+    box-shadow:0 0 0 1px #C01820!important;
+}
+
 /* ── info ───────────────────────────────────────────────── */
 [data-testid="stInfo"]{
     background:#FBEBEC; border-left:3px solid #C01820;
