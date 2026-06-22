@@ -2387,7 +2387,7 @@ def _render_alias_section(
 
 
 def _render_alias_editor():
-    """対応表の閲覧・編集 UI（3 テーブル並列）。"""
+    """対応表の閲覧・編集 UI（出力シートベースのタブ構成）。"""
     st.markdown(
         '<div class="page-card">'
         '<div class="page-card-title">対応表編集</div>'
@@ -2396,73 +2396,116 @@ def _render_alias_editor():
         unsafe_allow_html=True,
     )
 
-    # ── 3 テーブルをタブで並列 ─────────────────────────────
-    main_tabs = st.tabs(["工種名対応表", "絞り込みテーブル", "撮影箇所対応表"])
+    # ── 出力シートベースでタブ構成 ────────────────────────
+    main_tabs = st.tabs(["出来形・品質管理", "撮影箇所"])
 
-    # ── 工種名対応表 (kojyo_alias.json) ────────────────────
+    raw_ka = _load_json(ka._JSON_PATH)
+    raw_mf = _load_json(mf._JSON_PATH)
+    raw_pa = _load_json(pa._JSON_PATH)
+
+    # ── 出来形・品質管理タブ ──────────────────────────────
     with main_tabs[0]:
-        st.markdown("##### 工種名対応表")
-        st.caption("数量総括表の工種名 → DB工種名。部分一致で0件の場合のフォールバック。")
-        raw_ka = _load_json(ka._JSON_PATH)
-        _render_alias_section(
-            raw=raw_ka,
-            json_path=ka._JSON_PATH,
-            reload_fn=ka.reload,
-            sections=[("", "全エントリ", "変換元 → 変換先DB工種名",
-                        "変換元（工種名）", "変換先（DB工種名）")],
-            table_id="ka",
-        )
-        st.divider()
-        st.download_button(
-            "工種名対応表 JSON をダウンロード",
-            data=json.dumps(raw_ka, ensure_ascii=False, indent=2),
-            file_name="kojyo_alias.json", mime="application/json",
-        )
+        st.caption("出来形一覧・品管一覧のマッチングに共通で使用される設定です。")
 
-    # ── 絞り込みテーブル (match_filter.json) ───────────────
+        sub_tabs = st.tabs(["工種名の別名定義", "候補の絞り込みルール"])
+
+        with sub_tabs[0]:
+            st.markdown("##### 工種名の別名定義")
+            st.caption("数量総括表の工種名が部分一致で見つからない場合のフォールバック。"
+                       "数量総括表の表記 → 国交省DB上の正式名称を定義します。")
+            _render_alias_section(
+                raw=raw_ka,
+                json_path=ka._JSON_PATH,
+                reload_fn=ka.reload,
+                sections=[("", "全エントリ", "数量総括表の工種名 → DB工種名",
+                            "数量総括表の工種名", "DB工種名")],
+                table_id="ka",
+            )
+            st.divider()
+            st.download_button(
+                "JSON をダウンロード",
+                data=json.dumps(raw_ka, ensure_ascii=False, indent=2),
+                file_name="kojyo_alias.json", mime="application/json",
+                key="dl_ka",
+            )
+
+        with sub_tabs[1]:
+            st.markdown("##### 候補の絞り込みルール")
+            st.caption("マッチング候補が複数残った場合に、数量総括表のキーワードに基づいて"
+                       "正しい候補だけを残すルール。")
+            _render_alias_section(
+                raw=raw_mf,
+                json_path=mf._JSON_PATH,
+                reload_fn=mf.reload,
+                sections=[("", "全エントリ", "キーワード → 残すDB工種名",
+                            "キーワード", "残すDB工種名")],
+                table_id="mf",
+            )
+            st.divider()
+            st.download_button(
+                "JSON をダウンロード",
+                data=json.dumps(raw_mf, ensure_ascii=False, indent=2),
+                file_name="match_filter.json", mime="application/json",
+                key="dl_mf",
+            )
+
+    # ── 撮影箇所タブ ─────────────────────────────────────
     with main_tabs[1]:
-        st.markdown("##### 絞り込みテーブル")
-        st.caption("候補が複数残った場合、数量総括表のキーワードに基づき候補を絞り込む。")
-        raw_mf = _load_json(mf._JSON_PATH)
-        _render_alias_section(
-            raw=raw_mf,
-            json_path=mf._JSON_PATH,
-            reload_fn=mf.reload,
-            sections=[("", "全エントリ", "キーワード → 残すDB工種名",
-                        "キーワード", "残すDB工種名")],
-            table_id="mf",
-        )
-        st.divider()
-        st.download_button(
-            "絞り込みテーブル JSON をダウンロード",
-            data=json.dumps(raw_mf, ensure_ascii=False, indent=2),
-            file_name="match_filter.json", mime="application/json",
-        )
+        st.caption("撮影箇所一覧のマッチングに使用される設定です。")
 
-    # ── 撮影箇所対応表 (photo_alias.json) ──────────────────
-    with main_tabs[2]:
-        st.markdown("##### 撮影箇所対応表")
-        st.caption("数量総括表の工種名 → 撮影箇所DB工種名。部分一致で0件の場合のフォールバック。")
-        raw_pa = _load_json(pa._JSON_PATH)
-        _render_alias_section(
-            raw=raw_pa,
-            json_path=pa._JSON_PATH,
-            reload_fn=pa.reload,
-            sections=[
-                ("出来形管理",      "出来形管理", "数量総括表の工種名 → 撮影箇所DB工種（出来形セクション）",
-                 "数量総括表の工種名", "撮影箇所DB工種名"),
-                ("品質管理",        "品質管理",   "数量総括表の工種名 → 撮影箇所DB工種（品質セクション）",
-                 "数量総括表の工種名", "撮影箇所DB工種名"),
-                ("implicit_photo", "撮影箇所",   "キーワード部分一致 → 品質管理写真の追加工種",
-                 "キーワード", "追加工種名"),
-            ],
-            table_id="pa",
-        )
+        sub_tabs_p = st.tabs(["出来形セクション対応", "品質セクション対応", "品質管理写真の暗黙追加"])
+
+        with sub_tabs_p[0]:
+            st.markdown("##### 出来形管理セクションの別名定義")
+            st.caption("数量総括表の工種名 → 撮影箇所DB（出来形管理セクション）の工種名。"
+                       "部分一致で見つからない場合のフォールバック。")
+            _render_alias_section(
+                raw=raw_pa,
+                json_path=pa._JSON_PATH,
+                reload_fn=pa.reload,
+                sections=[
+                    ("出来形管理", "出来形管理", "数量総括表の工種名 → 撮影箇所DB工種名",
+                     "数量総括表の工種名", "撮影箇所DB工種名"),
+                ],
+                table_id="pa_d",
+            )
+
+        with sub_tabs_p[1]:
+            st.markdown("##### 品質管理セクションの別名定義")
+            st.caption("数量総括表の工種名 → 撮影箇所DB（品質管理セクション）の工種名。"
+                       "部分一致で見つからない場合のフォールバック。")
+            _render_alias_section(
+                raw=raw_pa,
+                json_path=pa._JSON_PATH,
+                reload_fn=pa.reload,
+                sections=[
+                    ("品質管理", "品質管理", "数量総括表の工種名 → 撮影箇所DB工種名",
+                     "数量総括表の工種名", "撮影箇所DB工種名"),
+                ],
+                table_id="pa_h",
+            )
+
+        with sub_tabs_p[2]:
+            st.markdown("##### 品質管理写真の暗黙追加ルール")
+            st.caption("数量総括表にキーワードが含まれる場合、品質管理写真の工種を"
+                       "撮影箇所一覧に自動追加するルール。")
+            _render_alias_section(
+                raw=raw_pa,
+                json_path=pa._JSON_PATH,
+                reload_fn=pa.reload,
+                sections=[
+                    ("implicit_photo", "暗黙追加", "キーワード → 追加する品質管理写真の工種",
+                     "キーワード", "追加工種名"),
+                ],
+                table_id="pa_ip",
+            )
+
         st.divider()
         st.download_button(
             "撮影箇所対応表 JSON をダウンロード",
             data=json.dumps(raw_pa, ensure_ascii=False, indent=2),
             file_name="photo_alias.json", mime="application/json",
+            key="dl_pa",
         )
 
 
