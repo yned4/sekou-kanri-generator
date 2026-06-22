@@ -2453,7 +2453,7 @@ def _render_alias_editor():
     with main_tabs[1]:
         st.caption("撮影箇所一覧のマッチングに使用される設定です。")
 
-        sub_tabs_p = st.tabs(["出来形セクション対応", "品質セクション対応", "品質管理写真の暗黙追加"])
+        sub_tabs_p = st.tabs(["出来形管理セクション", "品質管理セクション"])
 
         with sub_tabs_p[0]:
             st.markdown("##### 出来形管理セクションの別名定義")
@@ -2484,8 +2484,7 @@ def _render_alias_editor():
                 ],
                 table_id="pa_h",
             )
-
-        with sub_tabs_p[2]:
+            st.divider()
             st.markdown("##### 品質管理写真の暗黙追加ルール")
             st.caption("数量総括表にキーワードが含まれる場合、品質管理写真の工種を"
                        "撮影箇所一覧に自動追加するルール。")
