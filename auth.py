@@ -259,11 +259,11 @@ def set_user_permissions(user_id: str, project_ids: list[str]) -> None:
 
 def is_available() -> bool:
     """usersテーブルが使用可能か確認。"""
-    client = _client()
-    if client is None:
-        return False
     try:
+        client = _client()
+        if client is None:
+            return False
         client.table("users").select("id").limit(1).execute()
         return True
-    except Exception:
+    except BaseException:
         return False

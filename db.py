@@ -111,28 +111,31 @@ def list_projects(user_id: str | None = None, role: str | None = None) -> list[d
     if client is None:
         return []
 
-    if role == "admin" or user_id is None:
+    try:
+        if role == "admin" or user_id is None:
+            res = (
+                client.table("projects")
+                .select("id, kojyo_name, updated_at")
+                .order("updated_at", desc=True)
+                .execute()
+            )
+            return res.data
+
+        # editor/viewer: 権限テーブルでフィルタ
+        from auth import get_accessible_project_ids
+        allowed_ids = get_accessible_project_ids(user_id)
+        if not allowed_ids:
+            return []
         res = (
             client.table("projects")
             .select("id, kojyo_name, updated_at")
+            .in_("id", allowed_ids)
             .order("updated_at", desc=True)
             .execute()
         )
         return res.data
-
-    # editor/viewer: 権限テーブルでフィルタ
-    from auth import get_accessible_project_ids
-    allowed_ids = get_accessible_project_ids(user_id)
-    if not allowed_ids:
+    except Exception:
         return []
-    res = (
-        client.table("projects")
-        .select("id, kojyo_name, updated_at")
-        .in_("id", allowed_ids)
-        .order("updated_at", desc=True)
-        .execute()
-    )
-    return res.data
 
 
 def list_project_names(user_id: str | None = None, role: str | None = None) -> list[str]:

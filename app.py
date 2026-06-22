@@ -485,7 +485,12 @@ def _render_login():
                         else:
                             st.error("ユーザー名またはパスワードが正しくありません。")
 
-if auth.is_available() and st.session_state.current_user is None:
+try:
+    _auth_enabled = auth.is_available()
+except Exception:
+    _auth_enabled = False
+
+if _auth_enabled and st.session_state.current_user is None:
     _render_login()
     st.stop()
 
