@@ -874,7 +874,7 @@ def _narrow_with_shallower(matches, shallower_norms):
 _MAX_AFTER_NARROW = 15
 
 
-def _match_chain(chain: dict, norm_db: list) -> tuple:
+def _match_chain(chain: dict, norm_db: list, *, norm_alias_override=None) -> tuple:
     """
     1チェーン（工種/種別/細別/名称）に対して名称→細別→種別→工種の順でマッチングする。
 
@@ -887,6 +887,10 @@ def _match_chain(chain: dict, norm_db: list) -> tuple:
       4. 絞り込み後も _MAX_AFTER_NARROW を超える場合は汎用キーワードと判断して次のレベルへ
          ※ 盲目的な閾値スキップではなく「全絞り込みを試みた後の最終判断」として遡行する
 
+    Args:
+        norm_alias_override: 指定時、kojyo_alias の代わりに使用する別名辞書
+                             ({normalized_source: {normalized_target, ...}})
+
     Returns:
         (matched_kojyo_list, matched_level_name)
     """
@@ -896,7 +900,7 @@ def _match_chain(chain: dict, norm_db: list) -> tuple:
         if v and len(_normalize(v)) >= 2:
             ctx[lvl] = _normalize(v)
 
-    norm_alias     = _get_norm_alias()
+    norm_alias     = norm_alias_override if norm_alias_override is not None else _get_norm_alias()
     norm_narrowing = _get_norm_narrowing()
     ctx_vals       = list(ctx.values())
 
@@ -1023,22 +1027,23 @@ def _expand_hinshitsu_rows(matched_kojyo: list, full_df: pd.DataFrame) -> str:
 
 
 def _expand_photo_rows(
-    matched_kojyo_d: list,
-    matched_kojyo_h: list,
+    matched_photo_d: list,
+    matched_photo_h: list,
     photo_df: pd.DataFrame,
+    implicit_photo_kojyo: list = None,
 ) -> str:
     """
-    出来形・品質管理のマッチ工種から撮影箇所DBの該当行ラベルを生成する。
+    撮影箇所DBの直接マッチ結果からラベルを生成する。
 
-    label = "撮影箇所の工種名 / 撮影項目" 形式、改行区切り。
-    出来形管理セクションと品質管理セクションの両方を検索する。
+    _match_chain() で撮影箇所DBに直接マッチした工種名リストを受け取り、
+    "工種名 / 撮影項目" 形式のラベルに展開する。
 
-    マッチング手順:
-      1. _normalize() による部分一致（従来ロジック）
-      2. photo_alias.json による対応表フォールバック
+    Args:
+        matched_photo_d: 撮影箇所DB出来形セクションにマッチした工種名リスト
+        matched_photo_h: 撮影箇所DB品質セクションにマッチした工種名リスト
+        photo_df: 撮影箇所DB全体の DataFrame
+        implicit_photo_kojyo: 暗黙ルールで追加する品質セクション工種名リスト
     """
-    from photo_alias import resolve_photo_targets, get_implicit_photo_kojyo
-
     labels: list = []
     seen: set = set()
 
@@ -1050,78 +1055,87 @@ def _expand_photo_rows(
             labels.append(label)
             seen.add(label)
 
-    def _add_from_section(
-        df_section: pd.DataFrame,
-        raw_keys: list,
-        section_name: str,
-    ) -> None:
-        norm_keys = [_normalize(k) for k in raw_keys if k and len(_normalize(k)) >= 2]
+    def _add_from_section(df_section: pd.DataFrame, matched_kojyo: list) -> None:
+        if not matched_kojyo:
+            return
+        norm_keys = [_normalize(k) for k in matched_kojyo if k and len(_normalize(k)) >= 2]
         if not norm_keys:
             return
-
-        # 撮影箇所DBの各行を正規化値でインデックス化（一度だけ）
-        photo_norms: list[tuple[str, int]] = []
         for idx, r in df_section.iterrows():
             nv = _normalize(str(r.get("工種", "") or ""))
-            if nv:
-                photo_norms.append((nv, idx))
-
-        # Step 1: 従来の部分一致マッチング
-        matched_photo_norms: set[str] = set()
-        for nv, idx in photo_norms:
-            if any(nv in nk or nk in nv for nk in norm_keys):
-                _add_row(df_section.loc[idx])
-                matched_photo_norms.add(nv)
-
-        # Step 2: 対応表フォールバック
-        # Step 1 でマッチしなかった撮影箇所DB行を、対応表経由で補完する
-        for raw_key in raw_keys:
-            if not raw_key:
-                continue
-            alias_targets = resolve_photo_targets(raw_key, section_name)
-            for target in alias_targets:
-                nt = _normalize(target)
-                if not nt:
-                    continue
-                for nv, idx in photo_norms:
-                    if nv in matched_photo_norms:
-                        continue
-                    if nv in nt or nt in nv:
-                        _add_row(df_section.loc[idx])
-                        matched_photo_norms.add(nv)
+            if nv and any(nv in nk or nk in nv for nk in norm_keys):
+                _add_row(r)
 
     _add_from_section(
         photo_df[photo_df["セクション"] == "出来形管理"],
-        matched_kojyo_d,
-        "出来形管理",
+        matched_photo_d,
     )
     _add_from_section(
         photo_df[photo_df["セクション"] == "品質管理"],
-        matched_kojyo_h,
-        "品質管理",
+        matched_photo_h,
     )
 
-    # Step 3: implicit_photo ルールによる品質管理写真の追加
-    # matched_kojyo_d/h に「河川土工」等がある場合、
-    # 撮影箇所の品質管理セクションから「セメント・コンクリート」等を追加取得する
-    implicit_kojyo = get_implicit_photo_kojyo(matched_kojyo_d, matched_kojyo_h)
-    if implicit_kojyo:
-        df_hinshitsu = photo_df[photo_df["セクション"] == "品質管理"]
-        photo_norms_h: list[tuple[str, int]] = []
-        for idx, r in df_hinshitsu.iterrows():
-            nv = _normalize(str(r.get("工種", "") or ""))
-            if nv:
-                photo_norms_h.append((nv, idx))
-
-        for ik in implicit_kojyo:
-            nik = _normalize(ik)
-            if not nik:
-                continue
-            for nv, idx in photo_norms_h:
-                if nv in nik or nik in nv:
-                    _add_row(df_hinshitsu.loc[idx])
+    # implicit_photo: 数量総括表キーワードから追加される品質セクション工種
+    if implicit_photo_kojyo:
+        _add_from_section(
+            photo_df[photo_df["セクション"] == "品質管理"],
+            implicit_photo_kojyo,
+        )
 
     return "\n".join(labels)
+
+
+# ---------------------------------------------------------------------------
+# 間接トリガーによる出来形管理暗黙マッピング
+# ---------------------------------------------------------------------------
+
+# 数量総括表に特定のキーワードが含まれていたら、追加で出来形管理工種を含める。
+# 例: 「排水構造物工」があれば「一般事項（切込砂利）…」「管渠工」「集水桝工」を追加。
+_IMPLICIT_DEKIGATA_RULES: list[tuple[list[str], list[str]]] = [
+    (
+        # 排水構造物工 → 基礎砕石・均しコンクリートの管理基準
+        ["排水構造物工"],
+        [
+            "一般事項（切込砂利）（砕石基礎工）（割ぐり石基礎工）（均しコンクリート）",
+            "管渠工",
+            "集水桝工",
+            "現場打水路工",
+        ],
+    ),
+    (
+        # 集水桝・マンホール工 → 集水桝工も追加
+        ["集水桝", "マンホール"],
+        ["集水桝工"],
+    ),
+]
+
+
+def _get_implicit_dekigata(suryo_df: pd.DataFrame, db_dekigata_df: pd.DataFrame) -> list[str]:
+    """
+    数量総括表の全キーワードを走査し、間接トリガーで追加すべき出来形管理工種を返す。
+    """
+    db_dekigata_set = set(db_dekigata_df["工種"].unique())
+
+    all_suryo_norm: set[str] = set()
+    for col in SURYO_LEVEL_COLS:
+        for v in suryo_df[col].unique():
+            n = _normalize(str(v or ""))
+            if len(n) >= 2:
+                all_suryo_norm.add(n)
+
+    result: list[str] = []
+    for triggers, targets in _IMPLICIT_DEKIGATA_RULES:
+        hit = any(
+            _normalize(t) in sv or sv in _normalize(t)
+            for t in triggers
+            for sv in all_suryo_norm
+            if len(_normalize(t)) >= 2
+        )
+        if hit:
+            for tgt in targets:
+                if tgt in db_dekigata_set and tgt not in result:
+                    result.append(tgt)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -1146,6 +1160,11 @@ _IMPLICIT_HINSHITSU_RULES: list[tuple[list[str], list[str]]] = [
             "プレキャストコンクリート製品 (JIS Ⅱ類）",
             "プレキャストコンクリート製品（その他）",
         ],
+    ),
+    (
+        # 固結工・中層混合処理 → 中層混合処理
+        ["固結工", "中層混合処理"],
+        ["中層混合処理"],
     ),
 ]
 
@@ -1230,20 +1249,51 @@ def build_match_detail(
     )
     norm_h = [(k, _normalize(k)) for k in hin_hissu_kojyo if len(_normalize(k)) >= 2]
 
-    # 間接トリガーで追加すべき品質管理工種（プロジェクト全体レベル）
+    # 撮影箇所: 出来形/品質セクション別に norm リストを構築し、直接 _match_chain する
+    # （品質・出来形と同じ方式で数量総括表から直接マッチング）
+    norm_photo_d: list = []
+    norm_photo_h: list = []
+    photo_alias_d: dict = {}
+    photo_alias_h: dict = {}
+    implicit_photo_kojyo: list = []
+    if db_photo_df is not None:
+        from photo_alias import get_norm_alias_for_match_chain, get_implicit_photo_from_suryo
+        df_photo_d = db_photo_df[db_photo_df["セクション"] == "出来形管理"]
+        df_photo_h = db_photo_df[db_photo_df["セクション"] == "品質管理"]
+        norm_photo_d = [(k, _normalize(k)) for k in df_photo_d["工種"].unique() if len(_normalize(k)) >= 2]
+        norm_photo_h = [(k, _normalize(k)) for k in df_photo_h["工種"].unique() if len(_normalize(k)) >= 2]
+        photo_alias_d = get_norm_alias_for_match_chain("出来形管理")
+        photo_alias_h = get_norm_alias_for_match_chain("品質管理")
+        implicit_photo_kojyo = get_implicit_photo_from_suryo(suryo_df, db_photo_df)
+
+    # 間接トリガーで追加すべき工種（プロジェクト全体レベル）
     implicit_h = _get_implicit_hinshitsu(suryo_df, db_hinshitsu_df)
+    implicit_d = _get_implicit_dekigata(suryo_df, db_dekigata_df)
 
     records = []
     chains = suryo_df[SURYO_LEVEL_COLS].drop_duplicates()
 
-    # 間接品管を追加する行を判定するためのキー（種別・細別が空の行 = 工種ルート行）
+    # 間接品管/出来形を追加する行を判定するためのキー（種別・細別が空の行 = 工種ルート行）
     # 種別が空の最初の工種行（道路改良など）に付与する
     implicit_added = False
+    implicit_d_added = False
+    implicit_photo_added = False
 
     for _, chain in chains.iterrows():
         cd = chain.to_dict()
         md, _ = _match_chain(cd, norm_d)
         mh, _ = _match_chain(cd, norm_h)
+
+        # 撮影箇所: 数量総括表から直接マッチ（品質・出来形と同じ方式）
+        mp_d, _ = _match_chain(cd, norm_photo_d, norm_alias_override=photo_alias_d) if norm_photo_d else ([], "")
+        mp_h, _ = _match_chain(cd, norm_photo_h, norm_alias_override=photo_alias_h) if norm_photo_h else ([], "")
+
+        # 間接出来形をまだ追加していない場合、直接マッチが空の種別ルート行に付与
+        extra_d = []
+        if implicit_d and not implicit_d_added and not cd.get("種別", ""):
+            extra_d = [k for k in implicit_d if k not in md]
+            if extra_d:
+                implicit_d_added = True
 
         # 間接品管をまだ追加していない場合、直接マッチが空の種別ルート行に付与
         extra_h = []
@@ -1252,14 +1302,22 @@ def build_match_detail(
             if extra_h:
                 implicit_added = True
 
+        # 撮影箇所の暗黙ルール（implicit_photo）を最初の種別ルート行に付与
+        extra_photo = []
+        if implicit_photo_kojyo and not implicit_photo_added and not cd.get("種別", ""):
+            extra_photo = [k for k in implicit_photo_kojyo if k not in mp_h]
+            if extra_photo:
+                implicit_photo_added = True
+
+        all_md = md + extra_d
         all_mh = mh + extra_h
-        photo_match = _expand_photo_rows(md, all_mh, db_photo_df) if db_photo_df is not None else ""
+        photo_match = _expand_photo_rows(mp_d, mp_h, db_photo_df, extra_photo) if db_photo_df is not None else ""
         records.append({
             "工種":          cd.get("工種", ""),
             "種別":          cd.get("種別", ""),
             "細別":          cd.get("細別", ""),
             "名称":          cd.get("名称", ""),
-            "出来形マッチ":   _expand_to_rows(md, db_dekigata_df, ["測定項目"]),
+            "出来形マッチ":   _expand_to_rows(all_md, db_dekigata_df, ["測定項目"]),
             "品質管理マッチ": _expand_hinshitsu_rows(all_mh, db_hinshitsu_df[db_hinshitsu_df["試験区分"] == "必須"]),
             "撮影箇所マッチ": photo_match,
         })
