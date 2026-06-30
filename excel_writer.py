@@ -63,11 +63,12 @@ def _make_thin_border() -> Border:
 
 
 def _merge_col_cells(ws, col_idx: int, data_start_row: int, data_end_row: int,
-                     tate: bool = False) -> None:
+                     tate: bool = False, break_rows: set = None) -> None:
     """
     指定列の連続する同値セルを縦結合する。
     結合後は上端セルに値・スタイルを保持し、中央揃えにする。
     tate=True の場合は縦書き（textRotation=255）を適用する。
+    break_rows: 親列の値が変わる行番号のセット。この行では値が同じでも結合を切る。
     """
     if data_end_row < data_start_row:
         return
@@ -81,10 +82,11 @@ def _merge_col_cells(ws, col_idx: int, data_start_row: int, data_end_row: int,
     row = data_start_row
     while row <= data_end_row:
         cell_val = ws.cell(row=row, column=col_idx).value
-        # 同じ値が続く範囲を探す
+        # 同じ値が続く範囲を探す（親列の境界では切る）
         end_row = row
         while (end_row + 1 <= data_end_row
-               and ws.cell(row=end_row + 1, column=col_idx).value == cell_val):
+               and ws.cell(row=end_row + 1, column=col_idx).value == cell_val
+               and (break_rows is None or end_row + 1 not in break_rows)):
             end_row += 1
 
         if end_row > row:
@@ -228,13 +230,23 @@ def _write_sheet(
             ws.column_dimensions[col_letter].width = width
 
     # ── 指定列の縦セル結合 ────────────────────────────────────
+    # 親列の値が変わる行で子列の結合を切る（例: 工種が変われば種別も分離）
     if merge_cols and len(df) > 0:
         data_end_row = 5 + len(df)  # ヘッダー5行 + データ行数
         col_name_to_idx = {name: idx for idx, name in enumerate(df.columns, start=2)}
+        accumulated_breaks: set[int] = set()
         for col_name in merge_cols:
-            if col_name in col_name_to_idx:
-                _merge_col_cells(ws, col_name_to_idx[col_name], 6, data_end_row,
-                                 tate=col_name in tate_col_set)
+            if col_name not in col_name_to_idx:
+                continue
+            _merge_col_cells(ws, col_name_to_idx[col_name], 6, data_end_row,
+                             tate=col_name in tate_col_set,
+                             break_rows=accumulated_breaks or None)
+            # この列の値が変わる行を後続列の境界として蓄積
+            if col_name in df.columns:
+                col_vals = df[col_name].tolist()
+                for i in range(1, len(col_vals)):
+                    if col_vals[i] != col_vals[i - 1]:
+                        accumulated_breaks.add(6 + i)  # データ行は row 6 開始
 
 
 
