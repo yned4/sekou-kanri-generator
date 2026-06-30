@@ -34,9 +34,28 @@ HINSHITSU_VALID_COL_COUNTS = {9}
 # ===== 品質管理除外ルール =====
 # 品質管理マッチングプールから除外する工種の判定キーワード。
 # 工種名にキーワードが含まれ、かつ「を除く」の文脈でない場合に除外する。
-_HINSHITSU_EXCLUDE_ALWAYS = ["NATM", "コンクリートダム", "転圧コンクリート"]
+_HINSHITSU_EXCLUDE_ALWAYS = ["NATM", "コンクリートダム", "転圧コンクリート", "道路土工"]
 # 数量総括表に明示的に言及がない場合のみ除外するキーワード
-_HINSHITSU_EXCLUDE_UNLESS_IN_SURYO = ["排水性舗装", "透水性舗装", "プラント再生舗装"]
+_HINSHITSU_EXCLUDE_UNLESS_IN_SURYO = [
+    "排水性舗装", "透水性舗装", "プラント再生舗装",
+    "既製杭", "鉄筋挿入",
+]
+
+# ===== 出来形・撮影箇所 条件付き除外ルール =====
+# 数量総括表に明示的に言及がない場合にマッチングプールから除外するキーワード。
+# 舗装系バリエーション・防護柵・橋梁付属等の過剰出力を抑制する。
+_DEKIGATA_EXCLUDE_UNLESS_IN_SURYO = [
+    # 舗装系バリエーション（アスファルト舗装工以外）
+    "排水性舗装", "透水性舗装", "グースアスファルト舗装",
+    "半たわみ性舗装", "薄層カラー舗装", "ブロック舗装",
+    "コンクリート舗装", "プラント再生舗装",
+    # 防護柵系
+    "防護柵", "ガードレール", "ガードケーブル", "落石防護",
+    "橋梁用防護柵", "橋梁用高欄", "防止柵",
+    # 橋梁付属
+    "橋面防水", "地覆",
+]
+
 PHOTO_5COL_VALID            = {5}       # 全体・品質管理セクション
 PHOTO_9COL_VALID            = {9}       # 出来形管理セクション
 
@@ -719,15 +738,18 @@ def _is_hinshitsu_excluded(kojyo_name: str, extra_excludes: set = None) -> bool:
     - 「を除く」の文脈（例: "セメント・コンクリート(転圧コンクリート…を除く)(施工)"）は保持
     - _HINSHITSU_EXCLUDE_ALWAYS のキーワードを含む工種は除外
     - extra_excludes（数量総括表に明示がないキーワード）も追加で除外
+
+    ※ 正規化して比較（全角/半角の違いを吸収）
     """
-    if "施工後試験" in kojyo_name:
+    nn = _normalize(kojyo_name)
+    if _normalize("施工後試験") in nn:
         return True
-    if "を除く" in kojyo_name:
+    if _normalize("を除く") in nn:
         return False
     excludes = list(_HINSHITSU_EXCLUDE_ALWAYS)
     if extra_excludes:
         excludes += list(extra_excludes)
-    return any(kw in kojyo_name for kw in excludes)
+    return any(_normalize(kw) in nn for kw in excludes)
 
 
 def build_suryo_match_map(suryo_keywords: list, kojyo_list: list) -> dict:
@@ -1028,6 +1050,12 @@ def _expand_hinshitsu_rows(matched_kojyo: list, full_df: pd.DataFrame) -> str:
             labels.append(kojyo)
             continue
 
+        # 施工後試験の行を除外（品管で不要なケースが多い）
+        if "種別" in rows.columns:
+            rows = rows[~rows["種別"].str.contains("施工後試験", na=False)]
+            if rows.empty:
+                continue
+
         # 種別でソート
         if "種別" in rows.columns:
             rows["_sort_key"] = rows["種別"].apply(
@@ -1266,6 +1294,23 @@ def build_match_detail(
     if suryo_df.empty:
         return pd.DataFrame(columns=out_cols)
 
+    # ── 数量総括表キーワード収集（条件付き除外の基礎データ） ──
+    _suryo_norm_all: set[str] = set()
+    for col in SURYO_LEVEL_COLS:
+        for v in suryo_df[col].dropna().unique():
+            _suryo_norm_all.add(_normalize(str(v)))
+
+    # ── 出来形: 条件付き除外（数量総括表に言及がない舗装・防護柵等を除外） ──
+    _dekigata_excludes: set[str] = set()
+    for kw in _DEKIGATA_EXCLUDE_UNLESS_IN_SURYO:
+        nkw = _normalize(kw)
+        if not any(nkw in sv for sv in _suryo_norm_all):
+            _dekigata_excludes.add(nkw)
+
+    def _is_dekigata_excluded(name: str) -> bool:
+        nn = _normalize(name)
+        return any(ex in nn for ex in _dekigata_excludes)
+
     # 面管理版は数量総括表に明示的に「面管理」がない限り除外
     _has_menkanri = any(
         "面管理" in str(v)
@@ -1277,18 +1322,13 @@ def build_match_detail(
         for k in db_dekigata_df["工種"].unique()
         if len(_normalize(k)) >= 2
         and (_has_menkanri or "面管理の場合" not in k)
+        and not _is_dekigata_excluded(k)
     ]
 
-    # 品管: 試験区分=必須 の工種のみをマッチング対象とする
-    # + HINSHITSU_EXCLUDE で NATM系・ダム系・施工後試験等を除外
+    # ── 品管: 条件付き除外 ──
     hin_hissu_kojyo = set(
         db_hinshitsu_df[db_hinshitsu_df["試験区分"] == "必須"]["工種"].unique()
     )
-    # 数量総括表に明示がないキーワードを条件付き除外リストに追加
-    _suryo_norm_all: set[str] = set()
-    for col in SURYO_LEVEL_COLS:
-        for v in suryo_df[col].dropna().unique():
-            _suryo_norm_all.add(_normalize(str(v)))
     _conditional_excludes: set[str] = set()
     for kw in _HINSHITSU_EXCLUDE_UNLESS_IN_SURYO:
         nkw = _normalize(kw)
@@ -1301,8 +1341,8 @@ def build_match_detail(
         and not _is_hinshitsu_excluded(k, _conditional_excludes)
     ]
 
-    # 撮影箇所: 出来形/品質セクション別に norm リストを構築し、直接 _match_chain する
-    # （品質・出来形と同じ方式で数量総括表から直接マッチング）
+    # ── 撮影箇所: 出来形/品質セクション別に norm リストを構築 ──
+    # 出来形と同じ条件付き除外を撮影箇所にも適用
     norm_photo_d: list = []
     norm_photo_h: list = []
     photo_alias_d: dict = {}
@@ -1312,11 +1352,23 @@ def build_match_detail(
         from photo_alias import get_norm_alias_for_match_chain, get_implicit_photo_from_suryo
         df_photo_d = db_photo_df[db_photo_df["セクション"] == "出来形管理"]
         df_photo_h = db_photo_df[db_photo_df["セクション"] == "品質管理"]
-        norm_photo_d = [(k, _normalize(k)) for k in df_photo_d["工種"].unique() if len(_normalize(k)) >= 2]
-        norm_photo_h = [(k, _normalize(k)) for k in df_photo_h["工種"].unique() if len(_normalize(k)) >= 2]
+        norm_photo_d = [
+            (k, _normalize(k)) for k in df_photo_d["工種"].unique()
+            if len(_normalize(k)) >= 2 and not _is_dekigata_excluded(k)
+        ]
+        norm_photo_h = [
+            (k, _normalize(k)) for k in df_photo_h["工種"].unique()
+            if len(_normalize(k)) >= 2
+            and not _is_hinshitsu_excluded(k, _conditional_excludes)
+            and not _is_dekigata_excluded(k)
+        ]
         photo_alias_d = get_norm_alias_for_match_chain("出来形管理")
         photo_alias_h = get_norm_alias_for_match_chain("品質管理")
-        implicit_photo_kojyo = get_implicit_photo_from_suryo(suryo_df, db_photo_df)
+        implicit_photo_kojyo = [
+            k for k in get_implicit_photo_from_suryo(suryo_df, db_photo_df)
+            if not _is_hinshitsu_excluded(k, _conditional_excludes)
+            and not _is_dekigata_excluded(k)
+        ]
 
     # 間接トリガーで追加すべき工種（プロジェクト全体レベル）
     implicit_h = _get_implicit_hinshitsu(suryo_df, db_hinshitsu_df)
@@ -1331,15 +1383,43 @@ def build_match_detail(
     implicit_d_added = False
     implicit_photo_added = False
 
+    # ── 1st pass: 全チェーンのマッチングを実行し、候補を収集 ──
+    chain_results = []
     for _, chain in chains.iterrows():
         cd = chain.to_dict()
-        md, _ = _match_chain(cd, norm_d)
-        mh, _ = _match_chain(cd, norm_h)
+        md, md_level = _match_chain(cd, norm_d)
+        mh, mh_level = _match_chain(cd, norm_h)
 
         # 撮影箇所: 数量総括表から直接マッチ（品質・出来形と同じ方式）
         mp_d, _ = _match_chain(cd, norm_photo_d, norm_alias_override=photo_alias_d) if norm_photo_d else ([], "")
         mp_h, _ = _match_chain(cd, norm_photo_h, norm_alias_override=photo_alias_h) if norm_photo_h else ([], "")
 
+        chain_results.append((cd, md, md_level, mh, mh_level, mp_d, mp_h))
+
+    # ── 2nd pass: 同一種別グループ内で深い階層の具体的マッチがある場合、
+    #    浅い階層の広い候補（候補数>1）を間引く ──
+    for i, (cd, md, md_level, mh, mh_level, mp_d, mp_h) in enumerate(chain_results):
+        if len(md) <= 1:
+            continue
+        suryo_shubetsu = cd.get("種別", "")
+        if not suryo_shubetsu:
+            continue
+        # 同じ工種+種別のグループ内で、より具体的なマッチ（候補1件）があるか探す
+        specific_d: set[str] = set()
+        for j, (cd2, md2, md_level2, _, _, _, _) in enumerate(chain_results):
+            if i == j:
+                continue
+            if cd2.get("種別", "") == suryo_shubetsu and cd2.get("工種", "") == cd.get("工種", ""):
+                if len(md2) == 1:
+                    specific_d.update(md2)
+        # 具体的マッチがある場合、現在の候補をその具体的マッチに限定
+        if specific_d:
+            narrowed = [m for m in md if m in specific_d]
+            if narrowed:
+                chain_results[i] = (cd, narrowed, md_level, mh, mh_level, mp_d, mp_h)
+
+    # ── 3rd pass: records を組み立て ──
+    for cd, md, md_level, mh, mh_level, mp_d, mp_h in chain_results:
         # 間接出来形をまだ追加していない場合、直接マッチが空の種別ルート行に付与
         extra_d = []
         if implicit_d and not implicit_d_added and not cd.get("種別", ""):

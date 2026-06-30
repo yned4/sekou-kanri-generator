@@ -307,6 +307,8 @@ def _reshape_hinshitsu(df: pd.DataFrame) -> pd.DataFrame:
     out["社内規格値"] = df["規格値"].apply(_compute_shauchi)
     out["試験基準"]   = df["試験時期・頻度"].fillna("") if "試験時期・頻度" in df.columns else ""
     out["備考"]       = df["摘要"].fillna("") if "摘要" in df.columns else ""
+    # 表示名マッピング後に重複行（工種+種別+試験項目が同一）を除去
+    out = out.drop_duplicates(subset=["工種", "種別", "試験項目"], keep="first")
     return out.reset_index(drop=True)
 
 
