@@ -19,6 +19,7 @@ import db
 import photo_alias as pa
 import kojyo_alias as ka
 import match_filter as mf
+import matching_rules as mr
 
 from extractor import (
     extract_suryo,
@@ -2536,7 +2537,7 @@ def _render_alias_editor():
     )
 
     # ── 出力シートベースでタブ構成 ────────────────────────
-    main_tabs = st.tabs(["出来形・品質管理", "撮影箇所"])
+    main_tabs = st.tabs(["出来形・品質管理", "撮影箇所", "マッチングルール"])
 
     raw_ka = _load_json(ka._JSON_PATH)
     raw_mf = _load_json(mf._JSON_PATH)
@@ -2644,6 +2645,122 @@ def _render_alias_editor():
             data=json.dumps(raw_pa, ensure_ascii=False, indent=2),
             file_name="photo_alias.json", mime="application/json",
             key="dl_pa",
+        )
+
+    # ── マッチングルールタブ ───────────────────────────────
+    with main_tabs[2]:
+        st.caption("除外ルール・暗黙追加ルール・表示名リマップなど、"
+                   "マッチングの振る舞いを制御する設定です。")
+
+        raw_mr = _load_json(mr._JSON_PATH)
+
+        sub_tabs_mr = st.tabs([
+            "除外ルール",
+            "暗黙追加ルール（出来形）",
+            "暗黙追加ルール（品管）",
+            "表示名リマップ",
+        ])
+
+        with sub_tabs_mr[0]:
+            st.markdown("##### 品質管理 常時除外キーワード")
+            st.caption("品質管理マッチングから常に除外する工種キーワード。"
+                       "工種名にキーワードが含まれ「を除く」の文脈でない場合に除外。")
+            _render_alias_section(
+                raw=raw_mr,
+                json_path=mr._JSON_PATH,
+                reload_fn=mr.reload,
+                sections=[
+                    ("hinshitsu_exclude_always", "常時除外",
+                     "キーワード → 除外",
+                     "除外キーワード", "（未使用）"),
+                ],
+                table_id="mr_hea",
+
+            )
+            st.divider()
+            st.markdown("##### 品質管理 条件付き除外キーワード")
+            st.caption("数量総括表に明示的に言及がない場合のみ品質管理から除外するキーワード。")
+            _render_alias_section(
+                raw=raw_mr,
+                json_path=mr._JSON_PATH,
+                reload_fn=mr.reload,
+                sections=[
+                    ("hinshitsu_exclude_unless_in_suryo", "条件付き除外（品管）",
+                     "キーワード → 除外",
+                     "除外キーワード", "（未使用）"),
+                ],
+                table_id="mr_heu",
+
+            )
+            st.divider()
+            st.markdown("##### 出来形・撮影箇所 条件付き除外キーワード")
+            st.caption("数量総括表に明示的に言及がない場合のみ出来形管理・撮影箇所から除外。"
+                       "舗装バリエーション・防護柵・橋梁付属等の過剰出力を抑制。")
+            _render_alias_section(
+                raw=raw_mr,
+                json_path=mr._JSON_PATH,
+                reload_fn=mr.reload,
+                sections=[
+                    ("dekigata_exclude_unless_in_suryo", "条件付き除外（出来形）",
+                     "キーワード → 除外",
+                     "除外キーワード", "（未使用）"),
+                ],
+                table_id="mr_deu",
+
+            )
+
+        with sub_tabs_mr[1]:
+            st.markdown("##### 出来形管理の暗黙追加ルール")
+            st.caption("数量総括表にキーワードが含まれる場合、出来形管理工種を自動追加するルール。")
+            _render_alias_section(
+                raw=raw_mr,
+                json_path=mr._JSON_PATH,
+                reload_fn=mr.reload,
+                sections=[
+                    ("implicit_dekigata", "暗黙追加（出来形）",
+                     "トリガーキーワード → 追加する出来形管理工種",
+                     "トリガーキーワード", "追加するDB出来形管理工種名"),
+                ],
+                table_id="mr_id",
+            )
+
+        with sub_tabs_mr[2]:
+            st.markdown("##### 品質管理の暗黙追加ルール")
+            st.caption("数量総括表にキーワードが含まれる場合、品質管理工種を自動追加するルール。")
+            _render_alias_section(
+                raw=raw_mr,
+                json_path=mr._JSON_PATH,
+                reload_fn=mr.reload,
+                sections=[
+                    ("implicit_hinshitsu", "暗黙追加（品管）",
+                     "トリガーキーワード → 追加する品質管理工種",
+                     "トリガーキーワード", "追加するDB品質管理工種名"),
+                ],
+                table_id="mr_ih",
+            )
+
+        with sub_tabs_mr[3]:
+            st.markdown("##### 品質管理 工種表示名リマップ")
+            st.caption("Excel出力時にDB工種名を別の表示名に変換する。"
+                       "例: 「固結工」→「中層混合処理」")
+            _render_alias_section(
+                raw=raw_mr,
+                json_path=mr._JSON_PATH,
+                reload_fn=mr.reload,
+                sections=[
+                    ("hinshitsu_kojyo_display", "表示名リマップ",
+                     "DB工種名 → 表示名",
+                     "DB工種名", "表示名"),
+                ],
+                table_id="mr_hkd",
+            )
+
+        st.divider()
+        st.download_button(
+            "マッチングルール JSON をダウンロード",
+            data=json.dumps(raw_mr, ensure_ascii=False, indent=2),
+            file_name="matching_rules.json", mime="application/json",
+            key="dl_mr",
         )
 
 

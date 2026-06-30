@@ -278,10 +278,8 @@ def _compute_shauchi(規格値_val: str) -> str:
 
 
 # 品質管理工種の表示名マッピング
-# DB上の工種名を正解データの工種名に変換する
-_HINSHITSU_KOJYO_DISPLAY = {
-    "固結工": "中層混合処理",
-}
+# matching_rules.json から読み込む（対応表編集UIまたはJSON直接編集で変更可能）
+from matching_rules import get_hinshitsu_kojyo_display as _get_display_map
 
 
 def _reshape_hinshitsu(df: pd.DataFrame) -> pd.DataFrame:
@@ -297,8 +295,9 @@ def _reshape_hinshitsu(df: pd.DataFrame) -> pd.DataFrame:
     """
     out = pd.DataFrame(index=df.index)
     # 国交省DB品質管理シートの工種名を使用（表示名マッピングで変換）
+    display_map = _get_display_map()
     out["工種"]       = df["工種"].fillna("").apply(
-        lambda x: _HINSHITSU_KOJYO_DISPLAY.get(x, x)
+        lambda x: display_map.get(x, x)
     )
     out["種別"]       = df["種別"].fillna("")
     out["試験項目"]   = df["試験項目"].fillna("")

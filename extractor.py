@@ -31,30 +31,15 @@ PHOTO_DEKIGATA_END    = 74  # 撮影箇所一覧表（出来形管理）終了
 DEKIGATA_VALID_COL_COUNTS  = {11, 12, 13, 14}  # 11=規格値1列, 12=標準, 13=面管理, 14=規格値4分割
 HINSHITSU_VALID_COL_COUNTS = {9}
 
-# ===== 品質管理除外ルール =====
-# 品質管理マッチングプールから除外する工種の判定キーワード。
-# 工種名にキーワードが含まれ、かつ「を除く」の文脈でない場合に除外する。
-_HINSHITSU_EXCLUDE_ALWAYS = ["NATM", "コンクリートダム", "転圧コンクリート", "道路土工"]
-# 数量総括表に明示的に言及がない場合のみ除外するキーワード
-_HINSHITSU_EXCLUDE_UNLESS_IN_SURYO = [
-    "排水性舗装", "透水性舗装", "プラント再生舗装",
-    "既製杭", "鉄筋挿入",
-]
-
-# ===== 出来形・撮影箇所 条件付き除外ルール =====
-# 数量総括表に明示的に言及がない場合にマッチングプールから除外するキーワード。
-# 舗装系バリエーション・防護柵・橋梁付属等の過剰出力を抑制する。
-_DEKIGATA_EXCLUDE_UNLESS_IN_SURYO = [
-    # 舗装系バリエーション（アスファルト舗装工以外）
-    "排水性舗装", "透水性舗装", "グースアスファルト舗装",
-    "半たわみ性舗装", "薄層カラー舗装", "ブロック舗装",
-    "コンクリート舗装", "プラント再生舗装",
-    # 防護柵系
-    "防護柵", "ガードレール", "ガードケーブル", "落石防護",
-    "橋梁用防護柵", "橋梁用高欄", "防止柵",
-    # 橋梁付属
-    "橋面防水", "地覆",
-]
+# ===== 除外・暗黙追加ルール =====
+# matching_rules.json から読み込む（対応表編集UIまたはJSON直接編集で変更可能）
+from matching_rules import (
+    get_hinshitsu_exclude_always,
+    get_hinshitsu_exclude_unless_in_suryo,
+    get_dekigata_exclude_unless_in_suryo,
+    get_implicit_dekigata_rules,
+    get_implicit_hinshitsu_rules,
+)
 
 PHOTO_5COL_VALID            = {5}       # 全体・品質管理セクション
 PHOTO_9COL_VALID            = {9}       # 出来形管理セクション
@@ -746,7 +731,7 @@ def _is_hinshitsu_excluded(kojyo_name: str, extra_excludes: set = None) -> bool:
         return True
     if _normalize("を除く") in nn:
         return False
-    excludes = list(_HINSHITSU_EXCLUDE_ALWAYS)
+    excludes = list(get_hinshitsu_exclude_always())
     if extra_excludes:
         excludes += list(extra_excludes)
     return any(_normalize(kw) in nn for kw in excludes)
@@ -1084,6 +1069,7 @@ def _expand_photo_rows(
     matched_photo_h: list,
     photo_df: pd.DataFrame,
     implicit_photo_kojyo: list = None,
+    exclude_fn=None,
 ) -> str:
     """
     撮影箇所DBの直接マッチ結果からラベルを生成する。
@@ -1096,6 +1082,7 @@ def _expand_photo_rows(
         matched_photo_h: 撮影箇所DB品質セクションにマッチした工種名リスト
         photo_df: 撮影箇所DB全体の DataFrame
         implicit_photo_kojyo: 暗黙ルールで追加する品質セクション工種名リスト
+        exclude_fn: 条件付き除外関数（DB工種名を受け取りTrueなら除外）
     """
     labels: list = []
     seen: set = set()
@@ -1117,6 +1104,9 @@ def _expand_photo_rows(
         for idx, r in df_section.iterrows():
             nv = _normalize(str(r.get("工種", "") or ""))
             if nv and any(nv in nk or nk in nv for nk in norm_keys):
+                # 条件付き除外: 部分一致で拾ったDB工種が除外対象ならスキップ
+                if exclude_fn and exclude_fn(str(r.get("工種", "") or "")):
+                    continue
                 _add_row(r)
 
     _add_from_section(
@@ -1139,34 +1129,18 @@ def _expand_photo_rows(
 
 
 # ---------------------------------------------------------------------------
-# 間接トリガーによる出来形管理暗黙マッピング
+# 間接トリガーによる出来形管理・品質管理暗黙マッピング
+# ルールは matching_rules.json から読み込む
 # ---------------------------------------------------------------------------
-
-# 数量総括表に特定のキーワードが含まれていたら、追加で出来形管理工種を含める。
-# 例: 「排水構造物工」があれば「一般事項（切込砂利）…」「管渠工」「集水桝工」を追加。
-_IMPLICIT_DEKIGATA_RULES: list[tuple[list[str], list[str]]] = [
-    (
-        # 排水構造物工 → 基礎砕石・均しコンクリートの管理基準
-        ["排水構造物工"],
-        [
-            "一般事項（切込砂利）（砕石基礎工）（割ぐり石基礎工）（均しコンクリート）",
-            "管渠工",
-            "集水桝工",
-            "現場打水路工",
-        ],
-    ),
-    (
-        # 集水桝・マンホール工 → 集水桝工も追加
-        ["集水桝", "マンホール"],
-        ["集水桝工"],
-    ),
-]
 
 
 def _get_implicit_dekigata(suryo_df: pd.DataFrame, db_dekigata_df: pd.DataFrame) -> list[str]:
     """
     数量総括表の全キーワードを走査し、間接トリガーで追加すべき出来形管理工種を返す。
     """
+    rules = get_implicit_dekigata_rules()
+    if not rules:
+        return []
     db_dekigata_set = set(db_dekigata_df["工種"].unique())
 
     all_suryo_norm: set[str] = set()
@@ -1177,49 +1151,16 @@ def _get_implicit_dekigata(suryo_df: pd.DataFrame, db_dekigata_df: pd.DataFrame)
                 all_suryo_norm.add(n)
 
     result: list[str] = []
-    for triggers, targets in _IMPLICIT_DEKIGATA_RULES:
-        hit = any(
-            _normalize(t) in sv or sv in _normalize(t)
-            for t in triggers
-            for sv in all_suryo_norm
-            if len(_normalize(t)) >= 2
-        )
+    for trigger, targets in rules.items():
+        nt = _normalize(trigger)
+        if len(nt) < 2:
+            continue
+        hit = any(nt in sv or sv in nt for sv in all_suryo_norm)
         if hit:
             for tgt in targets:
                 if tgt in db_dekigata_set and tgt not in result:
                     result.append(tgt)
     return result
-
-
-# ---------------------------------------------------------------------------
-# 間接トリガーによる品質管理暗黙マッピング
-# ---------------------------------------------------------------------------
-
-# 数量総括表の細別/種別 に部分一致するキーワードが含まれていたら
-# 対応する品質管理工種を追加する（NFKC正規化後に照合）
-_IMPLICIT_HINSHITSU_RULES: list[tuple[list[str], list[str]]] = [
-    # トリガーキーワードリスト, 追加する品質管理DB工種リスト
-    (
-        # 現場打ちコンクリートを使う工種 → セメント・コンクリート
-        ["場所打擁壁工", "側溝工", "集水桝工", "集水桝", "函渠工", "カルバート工",
-         "現場打", "ボックスカルバート", "プレキャストカルバート工"],
-        ["セメント・コンクリート"],
-    ),
-    (
-        # プレキャスト製品を使う工種 → プレキャストコンクリート製品
-        ["プレキャスト", "カルバート工", "ボックスカルバート", "ヒューム管", "ＰＣ管"],
-        [
-            "プレキャストコンクリート製品 (JIS I類）",
-            "プレキャストコンクリート製品 (JIS Ⅱ類）",
-            "プレキャストコンクリート製品（その他）",
-        ],
-    ),
-    (
-        # 固結工・中層混合処理 → 中層混合処理
-        ["固結工", "中層混合処理"],
-        ["中層混合処理"],
-    ),
-]
 
 
 def get_implicit_hinshitsu_labels(suryo_df: pd.DataFrame, db_hinshitsu_df: pd.DataFrame) -> list[str]:
@@ -1242,6 +1183,9 @@ def _get_implicit_hinshitsu(suryo_df: pd.DataFrame, db_hinshitsu_df: pd.DataFram
     Returns:
         追加すべき品質管理工種名のリスト（DB内に存在するもののみ）
     """
+    rules = get_implicit_hinshitsu_rules()
+    if not rules:
+        return []
     db_hinshitsu_set = set(db_hinshitsu_df["工種"].unique())
 
     # 数量総括表の全ユニーク値を正規化してセットに集める
@@ -1253,14 +1197,11 @@ def _get_implicit_hinshitsu(suryo_df: pd.DataFrame, db_hinshitsu_df: pd.DataFram
                 all_suryo_norm.add(n)
 
     result: list[str] = []
-    for triggers, targets in _IMPLICIT_HINSHITSU_RULES:
-        # トリガーのいずれかが数量総括表に含まれていれば
-        hit = any(
-            _normalize(t) in sv or sv in _normalize(t)
-            for t in triggers
-            for sv in all_suryo_norm
-            if len(_normalize(t)) >= 2
-        )
+    for trigger, targets in rules.items():
+        nt = _normalize(trigger)
+        if len(nt) < 2:
+            continue
+        hit = any(nt in sv or sv in nt for sv in all_suryo_norm)
         if hit:
             for tgt in targets:
                 if tgt in db_hinshitsu_set and tgt not in result:
@@ -1302,7 +1243,7 @@ def build_match_detail(
 
     # ── 出来形: 条件付き除外（数量総括表に言及がない舗装・防護柵等を除外） ──
     _dekigata_excludes: set[str] = set()
-    for kw in _DEKIGATA_EXCLUDE_UNLESS_IN_SURYO:
+    for kw in get_dekigata_exclude_unless_in_suryo():
         nkw = _normalize(kw)
         if not any(nkw in sv for sv in _suryo_norm_all):
             _dekigata_excludes.add(nkw)
@@ -1330,7 +1271,7 @@ def build_match_detail(
         db_hinshitsu_df[db_hinshitsu_df["試験区分"] == "必須"]["工種"].unique()
     )
     _conditional_excludes: set[str] = set()
-    for kw in _HINSHITSU_EXCLUDE_UNLESS_IN_SURYO:
+    for kw in get_hinshitsu_exclude_unless_in_suryo():
         nkw = _normalize(kw)
         if not any(nkw in sv for sv in _suryo_norm_all):
             _conditional_excludes.add(kw)
@@ -1443,7 +1384,7 @@ def build_match_detail(
 
         all_md = md + extra_d
         all_mh = mh + extra_h
-        photo_match = _expand_photo_rows(mp_d, mp_h, db_photo_df, extra_photo) if db_photo_df is not None else ""
+        photo_match = _expand_photo_rows(mp_d, mp_h, db_photo_df, extra_photo, exclude_fn=_is_dekigata_excluded) if db_photo_df is not None else ""
         records.append({
             "工種":          cd.get("工種", ""),
             "種別":          cd.get("種別", ""),
