@@ -1792,6 +1792,27 @@ def _render_output():
         st.info(f"要選択 {n_yo} 件中 {confirmed} 件が確定済みです。未確認の {n_yo - confirmed} 件は全候補を自動採用します。"
                 f"　→ ③マッチングで確認できます。")
 
+    # ── DB未登録アラート ──────────────────────────────────────
+    if n_mi > 0:
+        mi_rows = df_tmp[df_tmp["状態"] == "未マッチ"]
+        mi_names = []
+        for _, r in mi_rows.iterrows():
+            parts = [str(r.get(c, "")).strip() for c in SURYO_LEVEL_COLS if str(r.get(c, "")).strip()]
+            mi_names.append(" › ".join(parts))
+        mi_list_html = "".join(f"<li>{n}</li>" for n in mi_names)
+        st.markdown(
+            f'<div style="background:#FFF3CD;border:1px solid #FFCD39;border-radius:8px;'
+            f'padding:16px 20px;margin-bottom:16px;">'
+            f'<div style="font-size:.88rem;font-weight:700;color:#856404;margin-bottom:8px;">'
+            f'DB未登録の工種（{n_mi} 件）</div>'
+            f'<div style="font-size:.8rem;color:#856404;margin-bottom:8px;">'
+            f'以下の工種は国交省DBに該当がないため、Excelに自動出力されません。'
+            f'手動行の追加、または対応表の更新で対応してください。</div>'
+            f'<ul style="font-size:.8rem;color:#856404;margin:0;padding-left:20px;">'
+            f'{mi_list_html}</ul></div>',
+            unsafe_allow_html=True,
+        )
+
     # ── 手動行の追加・管理 ─────────────────────────────────────
     _render_custom_rows(si.get("工事名", ""))
 
@@ -1824,11 +1845,18 @@ def _render_output():
                             db_kojyo = label.split(" / ")[0].strip()
                             if db_kojyo and db_kojyo not in dmap:
                                 dmap[db_kojyo] = suryo_kojyo
+                    # DB未登録工種をアラートシート用に収集
+                    _unmatched = []
+                    for _, _r in df_raw_out[df_raw_out["状態"] == "未マッチ"].iterrows():
+                        _unmatched.append({
+                            c: str(_r.get(c, "")).strip() for c in SURYO_LEVEL_COLS
+                        })
                     excel_bytes, dfs = write_excel(
                         filtered, 工事名=si["工事名"],
                         dekigata_kojyo_map=dmap,
                         custom_rows=_get_custom_rows(),
                         return_dfs=True,
+                        unmatched_items=_unmatched or None,
                     )
                 proj_name = (st.session_state.get("output_proj_name") or si["工事名"]).strip()
                 safe = re.sub(r'[\\/:*?"<>|　 ]', '_', proj_name)

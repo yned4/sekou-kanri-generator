@@ -20,6 +20,7 @@ SHEET_HINSHITSU  = "(8) 品管一覧"
 SHEET_DEKIGATA   = "(8) 出来形一覧"
 SHEET_DEKIGATA2  = "(8) 出来形一覧 (2)"
 SHEET_PHOTO      = "(8) 撮影箇所"
+SHEET_ALERT      = "DB未登録"
 
 # シート固有タイトル（行1 B列に表示）
 _SHEET_TITLE = {
@@ -264,6 +265,13 @@ def _compute_shauchi(規格値_val: str) -> str:
     return re.sub(r'\d+(?:\.\d+)?', _scale, s)
 
 
+# 品質管理工種の表示名マッピング
+# DB上の工種名を正解データの工種名に変換する
+_HINSHITSU_KOJYO_DISPLAY = {
+    "固結工": "中層混合処理",
+}
+
+
 def _reshape_hinshitsu(df: pd.DataFrame) -> pd.DataFrame:
     """
     品質管理DataFrameを出力列形式に変換する。
@@ -276,8 +284,10 @@ def _reshape_hinshitsu(df: pd.DataFrame) -> pd.DataFrame:
     リネーム: 試験時期・頻度→試験基準、摘要→備考
     """
     out = pd.DataFrame(index=df.index)
-    # 国交省DB品質管理シートの工種名をそのまま使用
-    out["工種"]       = df["工種"].fillna("")
+    # 国交省DB品質管理シートの工種名を使用（表示名マッピングで変換）
+    out["工種"]       = df["工種"].fillna("").apply(
+        lambda x: _HINSHITSU_KOJYO_DISPLAY.get(x, x)
+    )
     out["種別"]       = df["種別"].fillna("")
     out["試験項目"]   = df["試験項目"].fillna("")
     out["試験方法"]   = df["試験方法"].fillna("")
@@ -463,7 +473,57 @@ def _inject_custom_rows(df: pd.DataFrame, custom_rows: list, sheet_key: str) -> 
     return df
 
 
-def _build_wb(df_d: pd.DataFrame, df_h: pd.DataFrame, df_p: pd.DataFrame) -> "Workbook":
+def _write_alert_sheet(ws, unmatched_items: list) -> None:
+    """DB未登録の工種をアラートシートに書き出す。"""
+    warn_fill = PatternFill("solid", fgColor="FFF3CD")     # 黄色系背景
+    warn_font = Font(name=FONT_NAME, bold=True, size=9, color="856404")
+    note_font = Font(name=FONT_NAME, size=8, color="856404")
+    hdr_font  = Font(name=FONT_NAME, bold=False, size=8, color="000000")
+    hdr_fill  = PatternFill("solid", fgColor=HEADER_BG_COLOR)
+    hdr_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    data_align = _make_data_align()
+    border     = _make_thin_border()
+
+    # 行1: 警告タイトル
+    title_cell = ws.cell(row=1, column=1,
+                         value="以下の工種は国交省施工管理基準DBに該当がありません")
+    title_cell.font = warn_font
+    title_cell.fill = warn_fill
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=4)
+    ws.row_dimensions[1].height = 28
+
+    # 行2: 補足
+    note_cell = ws.cell(row=2, column=1,
+                        value="手動での追加、または対応表の更新が必要です。")
+    note_cell.font = note_font
+    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=4)
+    ws.row_dimensions[2].height = 20
+
+    # 行3: 空行
+    ws.row_dimensions[3].height = 8
+
+    # 行4: ヘッダー
+    cols = ["工種", "種別", "細別", "名称"]
+    for ci, col_name in enumerate(cols, start=1):
+        c = ws.cell(row=4, column=ci, value=col_name)
+        c.font, c.fill, c.alignment, c.border = hdr_font, hdr_fill, hdr_align, border
+    ws.row_dimensions[4].height = 24
+
+    # 行5〜: データ
+    for ri, item in enumerate(unmatched_items, start=5):
+        for ci, col_name in enumerate(cols, start=1):
+            c = ws.cell(row=ri, column=ci, value=item.get(col_name, ""))
+            c.font = Font(name=FONT_NAME, size=8)
+            c.alignment = data_align
+            c.border = border
+
+    # 列幅
+    for ci, w in enumerate([24, 20, 20, 28], start=1):
+        ws.column_dimensions[get_column_letter(ci)].width = w
+
+
+def _build_wb(df_d: pd.DataFrame, df_h: pd.DataFrame, df_p: pd.DataFrame,
+              unmatched_items: list = None) -> "Workbook":
     """DataFrameからWorkbookを構築する（内部ヘルパー）。"""
     wb = Workbook()
     wb.remove(wb.active)
@@ -500,6 +560,12 @@ def _build_wb(df_d: pd.DataFrame, df_h: pd.DataFrame, df_p: pd.DataFrame) -> "Wo
     _write_sheet(ws_p, df_p, title=_SHEET_TITLE[SHEET_PHOTO],
                  merge_cols=list(df_p.columns))
 
+    # DB未登録工種のアラートシート
+    if unmatched_items:
+        ws_alert = wb.create_sheet(SHEET_ALERT)
+        _write_alert_sheet(ws_alert, unmatched_items)
+        ws_alert.sheet_properties.tabColor = "FFC107"  # タブ色: 黄色
+
     return wb
 
 
@@ -510,6 +576,7 @@ def write_excel(
     dekigata_kojyo_map: dict = None,
     custom_rows: Optional[list] = None,
     return_dfs: bool = False,
+    unmatched_items: Optional[list] = None,
 ):
     """
     抽出データをExcelに書き出す。
@@ -521,6 +588,7 @@ def write_excel(
         dekigata_kojyo_map: {国交省工種名: 数量総括表工種名} の対応辞書。
         custom_rows:        手動追加行リスト。
         return_dfs:         True の場合 (bytes, dfs_dict) を返す。
+        unmatched_items:    DB未登録の数量総括表工種リスト（アラートシート用）。
 
     Returns:
         return_dfs=False: Excel バイト列（output_pathがNoneの場合）
@@ -535,7 +603,7 @@ def write_excel(
         df_d = _inject_custom_rows(df_d, custom_rows, "出来形一覧")
         df_p = _inject_custom_rows(df_p, custom_rows, "撮影箇所")
 
-    wb = _build_wb(df_d, df_h, df_p)
+    wb = _build_wb(df_d, df_h, df_p, unmatched_items=unmatched_items)
 
     if output_path:
         wb.save(output_path)

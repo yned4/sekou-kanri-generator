@@ -30,6 +30,13 @@ PHOTO_DEKIGATA_END    = 74  # 撮影箇所一覧表（出来形管理）終了
 # ページによっては図や注釈がテーブルとして誤認識される。列数で本文テーブルのみ抽出する。
 DEKIGATA_VALID_COL_COUNTS  = {11, 12, 13, 14}  # 11=規格値1列, 12=標準, 13=面管理, 14=規格値4分割
 HINSHITSU_VALID_COL_COUNTS = {9}
+
+# ===== 品質管理除外ルール =====
+# 品質管理マッチングプールから除外する工種の判定キーワード。
+# 工種名にキーワードが含まれ、かつ「を除く」の文脈でない場合に除外する。
+_HINSHITSU_EXCLUDE_ALWAYS = ["NATM", "コンクリートダム", "転圧コンクリート"]
+# 数量総括表に明示的に言及がない場合のみ除外するキーワード
+_HINSHITSU_EXCLUDE_UNLESS_IN_SURYO = ["排水性舗装", "透水性舗装", "プラント再生舗装"]
 PHOTO_5COL_VALID            = {5}       # 全体・品質管理セクション
 PHOTO_9COL_VALID            = {9}       # 出来形管理セクション
 
@@ -705,6 +712,24 @@ def _normalize(s: str) -> str:
     return s.lower()
 
 
+def _is_hinshitsu_excluded(kojyo_name: str, extra_excludes: set = None) -> bool:
+    """品質管理マッチングから除外すべき工種かどうか判定する。
+
+    - 施工後試験を含む工種は無条件除外
+    - 「を除く」の文脈（例: "セメント・コンクリート(転圧コンクリート…を除く)(施工)"）は保持
+    - _HINSHITSU_EXCLUDE_ALWAYS のキーワードを含む工種は除外
+    - extra_excludes（数量総括表に明示がないキーワード）も追加で除外
+    """
+    if "施工後試験" in kojyo_name:
+        return True
+    if "を除く" in kojyo_name:
+        return False
+    excludes = list(_HINSHITSU_EXCLUDE_ALWAYS)
+    if extra_excludes:
+        excludes += list(extra_excludes)
+    return any(kw in kojyo_name for kw in excludes)
+
+
 def build_suryo_match_map(suryo_keywords: list, kojyo_list: list) -> dict:
     """
     国交省基準工種 → 数量総括表工種 の対応辞書を返す。
@@ -871,7 +896,7 @@ def _narrow_with_shallower(matches, shallower_norms):
 
 
 # 絞り込み後もこの件数を超えたら「汎用的すぎるキーワード」と判断して次のレベルへ
-_MAX_AFTER_NARROW = 15
+_MAX_AFTER_NARROW = 8
 
 
 def _match_chain(chain: dict, norm_db: list, *, norm_alias_override=None) -> tuple:
@@ -1241,13 +1266,40 @@ def build_match_detail(
     if suryo_df.empty:
         return pd.DataFrame(columns=out_cols)
 
-    norm_d = [(k, _normalize(k)) for k in db_dekigata_df["工種"].unique()  if len(_normalize(k)) >= 2]
+    # 面管理版は数量総括表に明示的に「面管理」がない限り除外
+    _has_menkanri = any(
+        "面管理" in str(v)
+        for col in SURYO_LEVEL_COLS
+        for v in suryo_df[col].dropna().unique()
+    )
+    norm_d = [
+        (k, _normalize(k))
+        for k in db_dekigata_df["工種"].unique()
+        if len(_normalize(k)) >= 2
+        and (_has_menkanri or "面管理の場合" not in k)
+    ]
 
     # 品管: 試験区分=必須 の工種のみをマッチング対象とする
+    # + HINSHITSU_EXCLUDE で NATM系・ダム系・施工後試験等を除外
     hin_hissu_kojyo = set(
         db_hinshitsu_df[db_hinshitsu_df["試験区分"] == "必須"]["工種"].unique()
     )
-    norm_h = [(k, _normalize(k)) for k in hin_hissu_kojyo if len(_normalize(k)) >= 2]
+    # 数量総括表に明示がないキーワードを条件付き除外リストに追加
+    _suryo_norm_all: set[str] = set()
+    for col in SURYO_LEVEL_COLS:
+        for v in suryo_df[col].dropna().unique():
+            _suryo_norm_all.add(_normalize(str(v)))
+    _conditional_excludes: set[str] = set()
+    for kw in _HINSHITSU_EXCLUDE_UNLESS_IN_SURYO:
+        nkw = _normalize(kw)
+        if not any(nkw in sv for sv in _suryo_norm_all):
+            _conditional_excludes.add(kw)
+    norm_h = [
+        (k, _normalize(k))
+        for k in hin_hissu_kojyo
+        if len(_normalize(k)) >= 2
+        and not _is_hinshitsu_excluded(k, _conditional_excludes)
+    ]
 
     # 撮影箇所: 出来形/品質セクション別に norm リストを構築し、直接 _match_chain する
     # （品質・出来形と同じ方式で数量総括表から直接マッチング）
