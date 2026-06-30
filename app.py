@@ -2526,6 +2526,64 @@ def _render_alias_section(
                 st.caption("削除可能なエントリはありません。")
 
 
+def _render_keyword_list_section(
+    raw: dict,
+    json_path: Path,
+    reload_fn,
+    sec_key: str,
+    table_id: str,
+    label: str = "キーワード",
+):
+    """除外キーワードなど、値を持たないキーワードリストの編集UI。"""
+    entries = [k for k in raw.get(sec_key, {}) if not k.startswith("_")]
+
+    if entries:
+        df_kw = pd.DataFrame({label: entries})
+        st.dataframe(df_kw, use_container_width=True, hide_index=True,
+                     height=min(40 + 35 * len(entries), 500))
+    else:
+        st.info("登録されたキーワードはありません。")
+
+    st.divider()
+
+    uid = f"{table_id}_{sec_key}"
+
+    st.markdown("**キーワードを追加**")
+    new_kw = st.text_input(label, key=f"new_kw_{uid}",
+                           placeholder=f"{label}を入力")
+    if st.button("追加", key=f"add_{uid}", type="primary"):
+        kw = new_kw.strip()
+        if not kw:
+            st.warning("キーワードを入力してください。")
+        else:
+            target = raw.setdefault(sec_key, {})
+            if kw in target:
+                st.warning(f"「{kw}」は既に登録されています。")
+            else:
+                target[kw] = []
+                _save_json(json_path, raw)
+                reload_fn()
+                st.toast(f"「{kw}」を追加しました")
+                st.rerun()
+
+    st.divider()
+
+    st.markdown("**キーワードを削除**")
+    if entries:
+        del_kw = st.selectbox("削除するキーワードを選択",
+                              entries, key=f"del_{uid}")
+        if st.button("削除", key=f"delbtn_{uid}"):
+            target = raw.get(sec_key, {})
+            if del_kw in target:
+                del target[del_kw]
+                _save_json(json_path, raw)
+                reload_fn()
+                st.toast(f"「{del_kw}」を削除しました")
+                st.rerun()
+    else:
+        st.caption("削除可能なキーワードはありません。")
+
+
 def _render_alias_editor():
     """対応表の閲覧・編集 UI（出力シートベースのタブ構成）。"""
     st.markdown(
@@ -2633,46 +2691,37 @@ def _render_alias_editor():
             st.markdown("##### 品質管理 常時除外キーワード")
             st.caption("品質管理マッチングから常に除外する工種キーワード。"
                        "工種名にキーワードが含まれ「を除く」の文脈でない場合に除外。")
-            _render_alias_section(
+            _render_keyword_list_section(
                 raw=raw_mr,
                 json_path=mr._JSON_PATH,
                 reload_fn=mr.reload,
-                sections=[
-                    ("hinshitsu_exclude_always", "常時除外",
-                     "キーワード → 除外",
-                     "除外キーワード", "（未使用）"),
-                ],
+                sec_key="hinshitsu_exclude_always",
                 table_id="mr_hea",
+                label="除外キーワード",
             )
             st.divider()
             st.markdown("##### 品質管理 条件付き除外キーワード")
             st.caption("数量総括表に明示的に言及がない場合のみ品質管理から除外。"
                        "数量総括表にキーワードがあれば除外されません。")
-            _render_alias_section(
+            _render_keyword_list_section(
                 raw=raw_mr,
                 json_path=mr._JSON_PATH,
                 reload_fn=mr.reload,
-                sections=[
-                    ("hinshitsu_exclude_unless_in_suryo", "条件付き除外（品管）",
-                     "キーワード → 除外",
-                     "除外キーワード", "（未使用）"),
-                ],
+                sec_key="hinshitsu_exclude_unless_in_suryo",
                 table_id="mr_heu",
+                label="除外キーワード",
             )
             st.divider()
             st.markdown("##### 出来形・撮影箇所 条件付き除外キーワード")
             st.caption("数量総括表に明示的に言及がない場合のみ出来形管理・撮影箇所から除外。"
                        "舗装バリエーション・防護柵・橋梁付属等の過剰出力を抑制。")
-            _render_alias_section(
+            _render_keyword_list_section(
                 raw=raw_mr,
                 json_path=mr._JSON_PATH,
                 reload_fn=mr.reload,
-                sections=[
-                    ("dekigata_exclude_unless_in_suryo", "条件付き除外（出来形）",
-                     "キーワード → 除外",
-                     "除外キーワード", "（未使用）"),
-                ],
+                sec_key="dekigata_exclude_unless_in_suryo",
                 table_id="mr_deu",
+                label="除外キーワード",
             )
 
         with sub_tabs[4]:
