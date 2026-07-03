@@ -486,49 +486,105 @@ def _inject_custom_rows(df: pd.DataFrame, custom_rows: list, sheet_key: str) -> 
     return df
 
 
-def _write_alert_sheet(ws, unmatched_items: list) -> None:
-    """DB未登録の工種をアラートシートに書き出す。"""
-    warn_fill = PatternFill("solid", fgColor="FFF3CD")     # 黄色系背景
+def _write_alert_sheet(ws, unmatched_items: list,
+                       skip_keywords: Optional[list] = None) -> None:
+    """DB未登録の工種をアラートシートに書き出す（対象外/要確認の2段階）。"""
+    import matching_rules as mr
+    if skip_keywords is None:
+        skip_keywords = mr.get_skip_alert_keywords()
+
+    # 対象外 / 要確認 に分類
+    warn_items, skip_items = [], []
+    for item in unmatched_items:
+        joined = "".join(str(item.get(c, "")) for c in ["工種", "種別", "細別", "名称"])
+        if any(kw in joined for kw in skip_keywords):
+            skip_items.append(item)
+        else:
+            warn_items.append(item)
+
+    warn_fill = PatternFill("solid", fgColor="FFF3CD")
     warn_font = Font(name=FONT_NAME, bold=True, size=9, color="856404")
     note_font = Font(name=FONT_NAME, size=8, color="856404")
+    skip_fill = PatternFill("solid", fgColor="F0F0F0")
+    skip_font = Font(name=FONT_NAME, bold=True, size=9, color="666666")
+    skip_note_font = Font(name=FONT_NAME, size=8, color="666666")
     hdr_font  = Font(name=FONT_NAME, bold=False, size=8, color="000000")
     hdr_fill  = PatternFill("solid", fgColor=HEADER_BG_COLOR)
     hdr_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
     data_align = _make_data_align()
     border     = _make_thin_border()
-
-    # 行1: 警告タイトル
-    title_cell = ws.cell(row=1, column=1,
-                         value="以下の工種は国交省施工管理基準DBに該当がありません")
-    title_cell.font = warn_font
-    title_cell.fill = warn_fill
-    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=4)
-    ws.row_dimensions[1].height = 28
-
-    # 行2: 補足
-    note_cell = ws.cell(row=2, column=1,
-                        value="手動での追加、または対応表の更新が必要です。")
-    note_cell.font = note_font
-    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=4)
-    ws.row_dimensions[2].height = 20
-
-    # 行3: 空行
-    ws.row_dimensions[3].height = 8
-
-    # 行4: ヘッダー
     cols = ["工種", "種別", "細別", "名称"]
-    for ci, col_name in enumerate(cols, start=1):
-        c = ws.cell(row=4, column=ci, value=col_name)
-        c.font, c.fill, c.alignment, c.border = hdr_font, hdr_fill, hdr_align, border
-    ws.row_dimensions[4].height = 24
 
-    # 行5〜: データ
-    for ri, item in enumerate(unmatched_items, start=5):
+    row = 1
+
+    # ── 要確認セクション ──
+    if warn_items:
+        c = ws.cell(row=row, column=1,
+                    value=f"DB未登録 — 要確認（{len(warn_items)} 件）")
+        c.font, c.fill = warn_font, warn_fill
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=4)
+        ws.row_dimensions[row].height = 28
+        row += 1
+
+        c = ws.cell(row=row, column=1,
+                    value="以下の工種は国交省DBに該当がないため自動出力されません。"
+                          "手動行の追加、または対応表の更新で対応してください。")
+        c.font = note_font
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=4)
+        ws.row_dimensions[row].height = 20
+        row += 1
+
+        ws.row_dimensions[row].height = 8
+        row += 1
+
         for ci, col_name in enumerate(cols, start=1):
-            c = ws.cell(row=ri, column=ci, value=item.get(col_name, ""))
-            c.font = Font(name=FONT_NAME, size=8)
-            c.alignment = data_align
-            c.border = border
+            c = ws.cell(row=row, column=ci, value=col_name)
+            c.font, c.fill, c.alignment, c.border = hdr_font, hdr_fill, hdr_align, border
+        ws.row_dimensions[row].height = 24
+        row += 1
+
+        for item in warn_items:
+            for ci, col_name in enumerate(cols, start=1):
+                c = ws.cell(row=row, column=ci, value=item.get(col_name, ""))
+                c.font = Font(name=FONT_NAME, size=8)
+                c.alignment = data_align
+                c.border = border
+            row += 1
+
+        row += 1  # 空行
+
+    # ── 対象外セクション ──
+    if skip_items:
+        c = ws.cell(row=row, column=1,
+                    value=f"施工管理基準の対象外（{len(skip_items)} 件）")
+        c.font, c.fill = skip_font, skip_fill
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=4)
+        ws.row_dimensions[row].height = 28
+        row += 1
+
+        c = ws.cell(row=row, column=1,
+                    value="以下の工種は仮設・撤去等のため施工管理基準の対象外です。対応は不要です。")
+        c.font = skip_note_font
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=4)
+        ws.row_dimensions[row].height = 20
+        row += 1
+
+        ws.row_dimensions[row].height = 8
+        row += 1
+
+        for ci, col_name in enumerate(cols, start=1):
+            c = ws.cell(row=row, column=ci, value=col_name)
+            c.font, c.fill, c.alignment, c.border = hdr_font, hdr_fill, hdr_align, border
+        ws.row_dimensions[row].height = 24
+        row += 1
+
+        for item in skip_items:
+            for ci, col_name in enumerate(cols, start=1):
+                c = ws.cell(row=row, column=ci, value=item.get(col_name, ""))
+                c.font = Font(name=FONT_NAME, size=8, color="666666")
+                c.alignment = data_align
+                c.border = border
+            row += 1
 
     # 列幅
     for ci, w in enumerate([24, 20, 20, 28], start=1):

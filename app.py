@@ -1793,26 +1793,50 @@ def _render_output():
         st.info(f"要選択 {n_yo} 件中 {confirmed} 件が確定済みです。未確認の {n_yo - confirmed} 件は全候補を自動採用します。"
                 f"　→ ③マッチングで確認できます。")
 
-    # ── DB未登録アラート ──────────────────────────────────────
+    # ── DB未登録アラート（2段階: 対象外 / 要確認） ──────────────
     if n_mi > 0:
         mi_rows = df_tmp[df_tmp["状態"] == "未マッチ"]
-        mi_names = []
+        skip_kws = mr.get_skip_alert_keywords()
+        skip_names, warn_names = [], []
         for _, r in mi_rows.iterrows():
             parts = [str(r.get(c, "")).strip() for c in SURYO_LEVEL_COLS if str(r.get(c, "")).strip()]
-            mi_names.append(" › ".join(parts))
-        mi_list_html = "".join(f"<li>{n}</li>" for n in mi_names)
-        st.markdown(
-            f'<div style="background:#FFF3CD;border:1px solid #FFCD39;border-radius:8px;'
-            f'padding:16px 20px;margin-bottom:16px;">'
-            f'<div style="font-size:.88rem;font-weight:700;color:#856404;margin-bottom:8px;">'
-            f'DB未登録の工種（{n_mi} 件）</div>'
-            f'<div style="font-size:.8rem;color:#856404;margin-bottom:8px;">'
-            f'以下の工種は国交省DBに該当がないため、Excelに自動出力されません。'
-            f'手動行の追加、または対応表の更新で対応してください。</div>'
-            f'<ul style="font-size:.8rem;color:#856404;margin:0;padding-left:20px;">'
-            f'{mi_list_html}</ul></div>',
-            unsafe_allow_html=True,
-        )
+            label = " › ".join(parts)
+            joined = "".join(parts)
+            if any(kw in joined for kw in skip_kws):
+                skip_names.append(label)
+            else:
+                warn_names.append(label)
+
+        # 要確認（黄色）: 対応表追加やDB拡充が必要な可能性
+        if warn_names:
+            warn_html = "".join(f"<li>{n}</li>" for n in warn_names)
+            st.markdown(
+                f'<div style="background:#FFF3CD;border:1px solid #FFCD39;border-radius:8px;'
+                f'padding:16px 20px;margin-bottom:16px;">'
+                f'<div style="font-size:.88rem;font-weight:700;color:#856404;margin-bottom:8px;">'
+                f'DB未登録の工種 — 要確認（{len(warn_names)} 件）</div>'
+                f'<div style="font-size:.8rem;color:#856404;margin-bottom:8px;">'
+                f'以下の工種は国交省DBに該当がないため、Excelに自動出力されません。'
+                f'手動行の追加、または対応表の更新で対応してください。</div>'
+                f'<ul style="font-size:.8rem;color:#856404;margin:0;padding-left:20px;">'
+                f'{warn_html}</ul></div>',
+                unsafe_allow_html=True,
+            )
+
+        # 対象外（灰色）: 仮設・撤去等、施工管理基準の対象外で正常
+        if skip_names:
+            skip_html = "".join(f"<li>{n}</li>" for n in skip_names)
+            st.markdown(
+                f'<div style="background:#F0F0F0;border:1px solid #CCCCCC;border-radius:8px;'
+                f'padding:16px 20px;margin-bottom:16px;">'
+                f'<div style="font-size:.88rem;font-weight:700;color:#666666;margin-bottom:8px;">'
+                f'施工管理基準の対象外（{len(skip_names)} 件）</div>'
+                f'<div style="font-size:.8rem;color:#666666;margin-bottom:8px;">'
+                f'以下の工種は仮設・撤去等のため施工管理基準の対象外です。対応は不要です。</div>'
+                f'<ul style="font-size:.8rem;color:#666666;margin:0;padding-left:20px;">'
+                f'{skip_html}</ul></div>',
+                unsafe_allow_html=True,
+            )
 
     # ── 手動行の追加・管理 ─────────────────────────────────────
     _render_custom_rows(si.get("工事名", ""))
@@ -2688,6 +2712,18 @@ def _render_alias_editor():
             )
 
         with sub_tabs[3]:
+            st.markdown("##### 施工管理基準の対象外キーワード")
+            st.caption("仮設・撤去・運搬等、施工管理基準の対象にならない工種のキーワード。"
+                       "DB未登録アラートで「対象外（対応不要）」として灰色表示されます。")
+            _render_keyword_list_section(
+                raw=raw_mr,
+                json_path=mr._JSON_PATH,
+                reload_fn=mr.reload,
+                sec_key="skip_alert_keywords",
+                table_id="mr_sak",
+                label="対象外キーワード",
+            )
+            st.divider()
             st.markdown("##### 品質管理 常時除外キーワード")
             st.caption("品質管理マッチングから常に除外する工種キーワード。"
                        "工種名にキーワードが含まれ「を除く」の文脈でない場合に除外。")

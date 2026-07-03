@@ -63,6 +63,12 @@ def _keys_only(section: dict) -> list[str]:
     return [k for k in section if not k.startswith("_")]
 
 
+def get_skip_alert_keywords() -> list[str]:
+    """施工管理基準の対象外となる工種キーワードリストを返す（仮設・撤去等）。"""
+    data = _load()
+    return _keys_only(data.get("skip_alert_keywords", {}))
+
+
 def get_hinshitsu_exclude_always() -> list[str]:
     """品質管理から常に除外する工種キーワードリストを返す。"""
     data = _load()
