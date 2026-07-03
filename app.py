@@ -1796,7 +1796,7 @@ def _render_output():
     # ── DB未登録アラート（2段階: 対象外 / 要確認） ──────────────
     if n_mi > 0:
         mi_rows = df_tmp[df_tmp["状態"] == "未マッチ"]
-        skip_kws = mr.get_skip_alert_keywords()
+        skip_kws = mr.get_skip_alert_keywords() if hasattr(mr, "get_skip_alert_keywords") else []
         skip_names, warn_names = [], []
         for _, r in mi_rows.iterrows():
             parts = [str(r.get(c, "")).strip() for c in SURYO_LEVEL_COLS if str(r.get(c, "")).strip()]
