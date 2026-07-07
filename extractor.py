@@ -1070,6 +1070,7 @@ def _expand_photo_rows(
     photo_df: pd.DataFrame,
     implicit_photo_kojyo: list = None,
     exclude_fn=None,
+    exclude_fn_h=None,
 ) -> str:
     """
     撮影箇所DBの直接マッチ結果からラベルを生成する。
@@ -1082,7 +1083,8 @@ def _expand_photo_rows(
         matched_photo_h: 撮影箇所DB品質セクションにマッチした工種名リスト
         photo_df: 撮影箇所DB全体の DataFrame
         implicit_photo_kojyo: 暗黙ルールで追加する品質セクション工種名リスト
-        exclude_fn: 条件付き除外関数（DB工種名を受け取りTrueなら除外）
+        exclude_fn: 条件付き除外関数・出来形セクション用（DB工種名を受け取りTrueなら除外）
+        exclude_fn_h: 条件付き除外関数・品質セクション用（DB工種名を受け取りTrueなら除外）
     """
     labels: list = []
     seen: set = set()
@@ -1095,7 +1097,8 @@ def _expand_photo_rows(
             labels.append(label)
             seen.add(label)
 
-    def _add_from_section(df_section: pd.DataFrame, matched_kojyo: list) -> None:
+    def _add_from_section(df_section: pd.DataFrame, matched_kojyo: list,
+                          section_exclude_fn=None) -> None:
         if not matched_kojyo:
             return
         norm_keys = [_normalize(k) for k in matched_kojyo if k and len(_normalize(k)) >= 2]
@@ -1104,18 +1107,30 @@ def _expand_photo_rows(
         for idx, r in df_section.iterrows():
             nv = _normalize(str(r.get("工種", "") or ""))
             if nv and any(nv in nk or nk in nv for nk in norm_keys):
+                kojyo_str = str(r.get("工種", "") or "")
                 # 条件付き除外: 部分一致で拾ったDB工種が除外対象ならスキップ
-                if exclude_fn and exclude_fn(str(r.get("工種", "") or "")):
+                if section_exclude_fn and section_exclude_fn(kojyo_str):
                     continue
                 _add_row(r)
 
     _add_from_section(
         photo_df[photo_df["セクション"] == "出来形管理"],
         matched_photo_d,
+        section_exclude_fn=exclude_fn,
     )
+
+    # 品質セクション: 出来形除外 + 品質除外の両方を適用
+    def _combined_exclude_h(name: str) -> bool:
+        if exclude_fn and exclude_fn(name):
+            return True
+        if exclude_fn_h and exclude_fn_h(name):
+            return True
+        return False
+
     _add_from_section(
         photo_df[photo_df["セクション"] == "品質管理"],
         matched_photo_h,
+        section_exclude_fn=_combined_exclude_h,
     )
 
     # implicit_photo: 数量総括表キーワードから追加される品質セクション工種
@@ -1123,6 +1138,7 @@ def _expand_photo_rows(
         _add_from_section(
             photo_df[photo_df["セクション"] == "品質管理"],
             implicit_photo_kojyo,
+            section_exclude_fn=_combined_exclude_h,
         )
 
     return "\n".join(labels)
@@ -1169,8 +1185,7 @@ def get_implicit_hinshitsu_labels(suryo_df: pd.DataFrame, db_hinshitsu_df: pd.Da
     行選択状態に関わらず常に品管一覧に含めるために使用する。
     """
     kojyo_list = _get_implicit_hinshitsu(suryo_df, db_hinshitsu_df)
-    hissu_df = db_hinshitsu_df[db_hinshitsu_df["試験区分"] == "必須"]
-    return _expand_hinshitsu_rows(kojyo_list, hissu_df).split("\n") if kojyo_list else []
+    return _expand_hinshitsu_rows(kojyo_list, db_hinshitsu_df).split("\n") if kojyo_list else []
 
 
 def _get_implicit_hinshitsu(suryo_df: pd.DataFrame, db_hinshitsu_df: pd.DataFrame) -> list[str]:
@@ -1252,17 +1267,10 @@ def build_match_detail(
         nn = _normalize(name)
         return any(ex in nn for ex in _dekigata_excludes)
 
-    # 面管理版は数量総括表に明示的に「面管理」がない限り除外
-    _has_menkanri = any(
-        "面管理" in str(v)
-        for col in SURYO_LEVEL_COLS
-        for v in suryo_df[col].dropna().unique()
-    )
     norm_d = [
         (k, _normalize(k))
         for k in db_dekigata_df["工種"].unique()
         if len(_normalize(k)) >= 2
-        and (_has_menkanri or "面管理の場合" not in k)
         and not _is_dekigata_excluded(k)
     ]
 
@@ -1283,7 +1291,16 @@ def build_match_detail(
     ]
 
     # ── 撮影箇所: 出来形/品質セクション別に norm リストを構築 ──
-    # 出来形と同じ条件付き除外を撮影箇所にも適用
+    # 撮影箇所では dekigata_exclude_unless_in_suryo を無条件適用する
+    # （出来形管理では数量総括表にあれば除外しないが、撮影箇所では常に除外）
+    _photo_excludes: set[str] = set(
+        _normalize(kw) for kw in get_dekigata_exclude_unless_in_suryo()
+    )
+
+    def _is_photo_excluded(name: str) -> bool:
+        nn = _normalize(name)
+        return any(ex in nn for ex in _photo_excludes)
+
     norm_photo_d: list = []
     norm_photo_h: list = []
     photo_alias_d: dict = {}
@@ -1295,34 +1312,57 @@ def build_match_detail(
         df_photo_h = db_photo_df[db_photo_df["セクション"] == "品質管理"]
         norm_photo_d = [
             (k, _normalize(k)) for k in df_photo_d["工種"].unique()
-            if len(_normalize(k)) >= 2 and not _is_dekigata_excluded(k)
+            if len(_normalize(k)) >= 2 and not _is_photo_excluded(k)
         ]
         norm_photo_h = [
             (k, _normalize(k)) for k in df_photo_h["工種"].unique()
             if len(_normalize(k)) >= 2
             and not _is_hinshitsu_excluded(k, _conditional_excludes)
-            and not _is_dekigata_excluded(k)
+            and not _is_photo_excluded(k)
         ]
         photo_alias_d = get_norm_alias_for_match_chain("出来形管理")
         photo_alias_h = get_norm_alias_for_match_chain("品質管理")
         implicit_photo_kojyo = [
             k for k in get_implicit_photo_from_suryo(suryo_df, db_photo_df)
             if not _is_hinshitsu_excluded(k, _conditional_excludes)
-            and not _is_dekigata_excluded(k)
+            and not _is_photo_excluded(k)
         ]
 
     # 間接トリガーで追加すべき工種（プロジェクト全体レベル）
     implicit_h = _get_implicit_hinshitsu(suryo_df, db_hinshitsu_df)
-    implicit_d = _get_implicit_dekigata(suryo_df, db_dekigata_df)
+
+    # 出来形の間接トリガー: チェーン行ごとに該当ルールを適用するための準備
+    _implicit_d_rules = get_implicit_dekigata_rules()
+    _db_dekigata_set = set(db_dekigata_df["工種"].unique())
+
+    def _get_chain_implicit_d(chain_dict: dict) -> list[str]:
+        """チェーン行のキーワードにマッチする間接出来形工種を返す。"""
+        if not _implicit_d_rules:
+            return []
+        chain_norms = set()
+        for col in SURYO_LEVEL_COLS:
+            n = _normalize(str(chain_dict.get(col, "") or ""))
+            if len(n) >= 2:
+                chain_norms.add(n)
+        result = []
+        for trigger, targets in _implicit_d_rules.items():
+            nt = _normalize(trigger)
+            if len(nt) < 2:
+                continue
+            if any(nt in cn or cn in nt for cn in chain_norms):
+                for tgt in targets:
+                    if tgt in _db_dekigata_set and tgt not in result:
+                        result.append(tgt)
+        return result
 
     records = []
     chains = suryo_df[SURYO_LEVEL_COLS].drop_duplicates()
 
-    # 間接品管/出来形を追加する行を判定するためのキー（種別・細別が空の行 = 工種ルート行）
-    # 種別が空の最初の工種行（道路改良など）に付与する
+    # 間接品管は最初の種別ルート行に1回だけ付与
     implicit_added = False
-    implicit_d_added = False
     implicit_photo_added = False
+    # 出来形の間接トリガーは各チェーン行ごとに付与済みを追跡
+    implicit_d_added_set: set = set()
 
     # ── 1st pass: 全チェーンのマッチングを実行し、候補を収集 ──
     chain_results = []
@@ -1361,12 +1401,13 @@ def build_match_detail(
 
     # ── 3rd pass: records を組み立て ──
     for cd, md, md_level, mh, mh_level, mp_d, mp_h in chain_results:
-        # 間接出来形をまだ追加していない場合、直接マッチが空の種別ルート行に付与
+        # 間接出来形: チェーン行のキーワードに対応する暗黙工種を付与
         extra_d = []
-        if implicit_d and not implicit_d_added and not cd.get("種別", ""):
-            extra_d = [k for k in implicit_d if k not in md]
-            if extra_d:
-                implicit_d_added = True
+        if not cd.get("種別", ""):
+            chain_implicit_d = _get_chain_implicit_d(cd)
+            extra_d = [k for k in chain_implicit_d
+                       if k not in md and k not in implicit_d_added_set]
+            implicit_d_added_set.update(extra_d)
 
         # 間接品管をまだ追加していない場合、直接マッチが空の種別ルート行に付与
         extra_h = []
@@ -1384,14 +1425,18 @@ def build_match_detail(
 
         all_md = md + extra_d
         all_mh = mh + extra_h
-        photo_match = _expand_photo_rows(mp_d, mp_h, db_photo_df, extra_photo, exclude_fn=_is_dekigata_excluded) if db_photo_df is not None else ""
+        photo_match = _expand_photo_rows(
+            mp_d, mp_h, db_photo_df, extra_photo,
+            exclude_fn=_is_photo_excluded,
+            exclude_fn_h=lambda name: _is_hinshitsu_excluded(name, _conditional_excludes),
+        ) if db_photo_df is not None else ""
         records.append({
             "工種":          cd.get("工種", ""),
             "種別":          cd.get("種別", ""),
             "細別":          cd.get("細別", ""),
             "名称":          cd.get("名称", ""),
             "出来形マッチ":   _expand_to_rows(all_md, db_dekigata_df, ["測定項目"]),
-            "品質管理マッチ": _expand_hinshitsu_rows(all_mh, db_hinshitsu_df[db_hinshitsu_df["試験区分"] == "必須"]),
+            "品質管理マッチ": _expand_hinshitsu_rows(all_mh, db_hinshitsu_df),
             "撮影箇所マッチ": photo_match,
         })
 

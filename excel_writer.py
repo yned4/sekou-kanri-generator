@@ -444,10 +444,13 @@ def _reshape_photo(df: pd.DataFrame) -> pd.DataFrame:
                 "摘要":     row.get("摘要") or "",
             })
 
-    return pd.DataFrame(
+    out = pd.DataFrame(
         records,
         columns=["区分", "工種", "撮影項目", "撮影時期", "撮影頻度", "提出頻度", "摘要"],
     )
+    # 「着手前・完成」分離により生じる重複行を除去
+    out = out.drop_duplicates().reset_index(drop=True)
+    return out
 
 
 def _inject_custom_rows(df: pd.DataFrame, custom_rows: list, sheet_key: str) -> pd.DataFrame:
@@ -615,15 +618,26 @@ def _build_wb(df_d: pd.DataFrame, df_h: pd.DataFrame, df_p: pd.DataFrame,
         _write_sheet(ws_d, df_d, title=_SHEET_TITLE[SHEET_DEKIGATA],
                      merge_cols=["工種", "種別"], tate_cols=["工種"])
 
-    # 撮影箇所: 左列から右列の順にソートしてからセル結合
-    # 区分の出現順（自然順）を保持したまま、工種・撮影項目で二次ソート
+    # 撮影箇所: 区分の正規順でグループ化し、同一区分内は工種の初出順でまとめる
     if not df_p.empty:
-        kubun_rank = {v: i for i, v in enumerate(dict.fromkeys(df_p["区分"].tolist()))}
+        _KUBUN_ORDER = [
+            "着手前", "完成", "施工状況", "安全管理", "使用材料",
+            "品質管理写真", "出来形管理写真", "災害", "事故", "その他",
+        ]
+        kubun_rank = {v: i for i, v in enumerate(_KUBUN_ORDER)}
         df_p = df_p.copy()
-        df_p["_rank"] = df_p["区分"].map(kubun_rank)
-        inner_cols = [c for c in df_p.columns if c not in ("区分", "_rank")]
-        df_p = df_p.sort_values(["_rank"] + inner_cols, kind="stable")
-        df_p = df_p.drop(columns=["_rank"]).reset_index(drop=True)
+        df_p["_kubun_rank"] = df_p["区分"].map(lambda x: kubun_rank.get(x, 999))
+        # 同一区分内で工種の初出順を保持しつつ同一工種行をまとめる
+        kojyo_first = {}
+        kojyo_ranks = []
+        for _, r in df_p.iterrows():
+            key = (r["_kubun_rank"], r["工種"])
+            if key not in kojyo_first:
+                kojyo_first[key] = len(kojyo_first)
+            kojyo_ranks.append(kojyo_first[key])
+        df_p["_kojyo_rank"] = kojyo_ranks
+        df_p = df_p.sort_values(["_kubun_rank", "_kojyo_rank"], kind="stable")
+        df_p = df_p.drop(columns=["_kubun_rank", "_kojyo_rank"]).reset_index(drop=True)
 
     ws_p = wb.create_sheet(SHEET_PHOTO)
     _write_sheet(ws_p, df_p, title=_SHEET_TITLE[SHEET_PHOTO],
