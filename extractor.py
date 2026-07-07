@@ -1364,11 +1364,31 @@ def build_match_detail(
     # 出来形の間接トリガーは各チェーン行ごとに付与済みを追跡
     implicit_d_added_set: set = set()
 
+    # 面管理版の自動追加用: 通常版→面管理版 の対応を構築
+    _menkanri_map: dict[str, list[str]] = {}
+    _norm_d_names = {k for k, _ in norm_d}
+    for k in _norm_d_names:
+        if "面管理の場合" not in k:
+            # 通常版に対応する面管理版を探す
+            menkanri_variants = [
+                mk for mk in _norm_d_names
+                if "面管理の場合" in mk and k in mk
+            ]
+            if menkanri_variants:
+                _menkanri_map[k] = menkanri_variants
+
     # ── 1st pass: 全チェーンのマッチングを実行し、候補を収集 ──
     chain_results = []
     for _, chain in chains.iterrows():
         cd = chain.to_dict()
         md, md_level = _match_chain(cd, norm_d)
+        # 通常版がマッチした場合、対応する面管理版も候補に追加
+        menkanri_extra = []
+        for m in md:
+            for mv in _menkanri_map.get(m, []):
+                if mv not in md and mv not in menkanri_extra:
+                    menkanri_extra.append(mv)
+        md = md + menkanri_extra
         mh, mh_level = _match_chain(cd, norm_h)
 
         # 撮影箇所: 数量総括表から直接マッチ（品質・出来形と同じ方式）
