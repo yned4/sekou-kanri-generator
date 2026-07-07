@@ -1402,23 +1402,24 @@ def build_match_detail(
     # ── 3rd pass: records を組み立て ──
     for cd, md, md_level, mh, mh_level, mp_d, mp_h in chain_results:
         # 間接出来形: チェーン行のキーワードに対応する暗黙工種を付与
+        # 細別が空の行（工種ルート行 or 種別ルート行）に対して適用
         extra_d = []
-        if not cd.get("種別", ""):
+        if not cd.get("細別", ""):
             chain_implicit_d = _get_chain_implicit_d(cd)
             extra_d = [k for k in chain_implicit_d
                        if k not in md and k not in implicit_d_added_set]
             implicit_d_added_set.update(extra_d)
 
-        # 間接品管をまだ追加していない場合、直接マッチが空の種別ルート行に付与
+        # 間接品管をまだ追加していない場合、細別が空のルート行に付与
         extra_h = []
-        if implicit_h and not implicit_added and not cd.get("種別", ""):
+        if implicit_h and not implicit_added and not cd.get("細別", ""):
             extra_h = [k for k in implicit_h if k not in mh]
             if extra_h:
                 implicit_added = True
 
-        # 撮影箇所の暗黙ルール（implicit_photo）を最初の種別ルート行に付与
+        # 撮影箇所の暗黙ルール（implicit_photo）を最初の細別が空のルート行に付与
         extra_photo = []
-        if implicit_photo_kojyo and not implicit_photo_added and not cd.get("種別", ""):
+        if implicit_photo_kojyo and not implicit_photo_added and not cd.get("細別", ""):
             extra_photo = [k for k in implicit_photo_kojyo if k not in mp_h]
             if extra_photo:
                 implicit_photo_added = True
