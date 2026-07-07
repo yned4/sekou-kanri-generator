@@ -430,8 +430,15 @@ def _reshape_photo(df: pd.DataFrame) -> pd.DataFrame:
         # 撮影時期・撮影頻度を分離
         timing, freq = _parse_photo_frequency(row.get("撮影頻度") or "")
 
-        # 「着手前・完成」は着手前・完成の2行に分離（#10）
-        kubun_list = ["着手前", "完成"] if kubun == "着手前・完成" else [kubun]
+        # 「着手前・完成」の処理:
+        # sub区分が「着手前」or「完成」→ sub区分をそのまま区分として使用（分離不要）
+        # sub区分がそれ以外 → 着手前・完成の2行に分離
+        if kubun == "着手前・完成" and kojyo in ("着手前", "完成"):
+            kubun_list = [kojyo]
+        elif kubun == "着手前・完成":
+            kubun_list = ["着手前", "完成"]
+        else:
+            kubun_list = [kubun]
 
         for kb in kubun_list:
             records.append({
