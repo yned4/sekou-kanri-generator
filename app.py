@@ -374,27 +374,30 @@ def _chain_key(row):
 
 def _auto_save_session():
     """対応表の作業状態をDBに自動保存する。"""
-    si = st.session_state.get("suryo_info")
-    if si is None or not db.is_available():
-        return
-    kojyo_name = si.get("工事名", "")
-    if not kojyo_name:
-        return
-    user = st.session_state.get("current_user")
-    user_id = user["id"] if user else None
-    n_confirmed = len(st.session_state.get("confirmed_keys", set()))
-    dm = st.session_state.get("df_match")
-    n_total = len(dm) if dm is not None else 0
-    progress = "完了" if n_total > 0 and n_confirmed == n_total else "作業中"
-    state = db.serialize_session(
-        suryo_info=si,
-        df_match=dm,
-        row_selections=st.session_state.get("row_selections", {}),
-        confirmed_keys=st.session_state.get("confirmed_keys", set()),
-        custom_rows=st.session_state.get("custom_rows", []),
-        selected_idx=st.session_state.get("selected_idx"),
-    )
-    db.save_session(kojyo_name, user_id, state, progress)
+    try:
+        si = st.session_state.get("suryo_info")
+        if si is None or not db.is_available():
+            return
+        kojyo_name = si.get("工事名", "")
+        if not kojyo_name:
+            return
+        user = st.session_state.get("current_user")
+        user_id = user["id"] if user else None
+        n_confirmed = len(st.session_state.get("confirmed_keys", set()))
+        dm = st.session_state.get("df_match")
+        n_total = len(dm) if dm is not None else 0
+        progress = "完了" if n_total > 0 and n_confirmed == n_total else "作業中"
+        state = db.serialize_session(
+            suryo_info=si,
+            df_match=dm,
+            row_selections=st.session_state.get("row_selections", {}),
+            confirmed_keys=st.session_state.get("confirmed_keys", set()),
+            custom_rows=st.session_state.get("custom_rows", []),
+            selected_idx=st.session_state.get("selected_idx"),
+        )
+        db.save_session(kojyo_name, user_id, state, progress)
+    except Exception:
+        pass
 
 def _restore_session_from_db(kojyo_name: str):
     """DBからセッションを復元してsession_stateに反映する。"""
@@ -699,7 +702,10 @@ def _render_upload():
         _user = st.session_state.get("current_user")
         _uid = _user["id"] if _user else None
         _urole = _user["role"] if _user else "admin"
-        _sessions = db.list_sessions(user_id=_uid, role=_urole)
+        try:
+            _sessions = db.list_sessions(user_id=_uid, role=_urole)
+        except Exception:
+            _sessions = []
         if _sessions:
             st.markdown("#### 作業途中のセッション")
             for _si_item in _sessions:
