@@ -372,6 +372,52 @@ if "current_user"    not in st.session_state: st.session_state["current_user"]  
 def _chain_key(row):
     return tuple(str(row.get(c,"")) for c in SURYO_LEVEL_COLS)
 
+def _auto_save_session():
+    """対応表の作業状態をDBに自動保存する。"""
+    si = st.session_state.get("suryo_info")
+    if si is None or not db.is_available():
+        return
+    kojyo_name = si.get("工事名", "")
+    if not kojyo_name:
+        return
+    user = st.session_state.get("current_user")
+    user_id = user["id"] if user else None
+    n_confirmed = len(st.session_state.get("confirmed_keys", set()))
+    dm = st.session_state.get("df_match")
+    n_total = len(dm) if dm is not None else 0
+    progress = "完了" if n_total > 0 and n_confirmed == n_total else "作業中"
+    state = db.serialize_session(
+        suryo_info=si,
+        df_match=dm,
+        row_selections=st.session_state.get("row_selections", {}),
+        confirmed_keys=st.session_state.get("confirmed_keys", set()),
+        custom_rows=st.session_state.get("custom_rows", []),
+        selected_idx=st.session_state.get("selected_idx"),
+    )
+    db.save_session(kojyo_name, user_id, state, progress)
+
+def _restore_session_from_db(kojyo_name: str):
+    """DBからセッションを復元してsession_stateに反映する。"""
+    user = st.session_state.get("current_user")
+    user_id = user["id"] if user else None
+    raw = db.load_session(kojyo_name, user_id)
+    if raw is None:
+        return False
+    restored = db.deserialize_session(raw)
+    st.session_state.suryo_info = restored["suryo_info"]
+    st.session_state.df_match = restored["df_match"]
+    st.session_state.row_selections = restored["row_selections"]
+    st.session_state.confirmed_keys = restored["confirmed_keys"]
+    st.session_state.custom_rows = restored.get("custom_rows", [])
+    st.session_state.selected_idx = restored.get("selected_idx")
+    st.session_state.excel_cache = None
+    st.session_state.excel_fname = None
+    # チェックボックスstateをクリア
+    for k in list(st.session_state.keys()):
+        if k.startswith(("chk_d_", "chk_h_", "chk_p_")):
+            del st.session_state[k]
+    return True
+
 def _group_items(items):
     g = {}
     for item in items:
@@ -648,6 +694,42 @@ def _render_upload():
         st.markdown('</div>', unsafe_allow_html=True)
         return
 
+    # ── 保存済みセッション一覧 ──────────────────────────────────
+    if db.is_available():
+        _user = st.session_state.get("current_user")
+        _uid = _user["id"] if _user else None
+        _urole = _user["role"] if _user else "admin"
+        _sessions = db.list_sessions(user_id=_uid, role=_urole)
+        if _sessions:
+            st.markdown("#### 作業途中のセッション")
+            for _si_item in _sessions:
+                _sname = _si_item["kojyo_name"]
+                _sprog = _si_item.get("progress", "作業中")
+                _supdated = _si_item.get("updated_at", "")[:16].replace("T", " ")
+                _c1, _c2, _c3 = st.columns([5, 1, 1])
+                with _c1:
+                    st.markdown(
+                        f'<div style="font-size:.88rem;padding:4px 0;">'
+                        f'{_sname}'
+                        f'<span style="font-size:.72rem;color:#9A9893;margin-left:8px;">'
+                        f'{_sprog} — {_supdated}</span></div>',
+                        unsafe_allow_html=True,
+                    )
+                with _c2:
+                    if st.button("再開", key=f"resume_{_si_item['id']}", use_container_width=True):
+                        if _restore_session_from_db(_sname):
+                            st.session_state.page = "matching"
+                            st.toast(f"「{_sname}」を再開しました")
+                            st.rerun()
+                        else:
+                            st.error("復元に失敗しました")
+                with _c3:
+                    if st.button("削除", key=f"del_sess_{_si_item['id']}", use_container_width=True):
+                        db.delete_session(_sname, _uid)
+                        st.toast(f"「{_sname}」を削除しました")
+                        st.rerun()
+            st.divider()
+
     uploaded = st.file_uploader("数量総括表PDFをドラッグ＆ドロップ、またはクリックで選択",
                                  type="pdf", label_visibility="visible")
 
@@ -691,6 +773,7 @@ def _render_upload():
                     st.session_state.confirmed_keys = set()
                     st.session_state.excel_cache    = None
                     st.session_state.excel_fname    = None
+                    _auto_save_session()
                     st.session_state.page           = "structure"
                     st.rerun()
                 except Exception:
@@ -1141,6 +1224,7 @@ def _render_matching():
                         if st.button("確定して次へ →", type="primary",
                                      use_container_width=True, key="confirm_next_btn"):
                             st.session_state.confirmed_keys.add(ckey)
+                            _auto_save_session()
                             st.toast(f"「{sel['_name']}」を確定しました")
                             st.session_state.selected_idx = yo_idxs[cur_pos + 1]
                             st.rerun()
@@ -1148,6 +1232,7 @@ def _render_matching():
                         if st.button("確定（最終項目）✓", type="primary",
                                      use_container_width=True, key="confirm_last_btn"):
                             st.session_state.confirmed_keys.add(ckey)
+                            _auto_save_session()
                             st.toast("すべての要選択を確認しました。④出力へ進んでください。")
                             st.rerun()
 
@@ -1892,6 +1977,9 @@ def _render_output():
                 st.session_state.pm_editing = proj_name  # 編集ページ用に保持
                 if db.is_available():
                     db.save_project(proj_name, dfs)
+                    # 出力完了 → 作業セッションを削除
+                    _u_out = st.session_state.get("current_user")
+                    db.delete_session(proj_name, _u_out["id"] if _u_out else None)
                     # 非adminユーザーが作成した場合、自動で閲覧権限を付与
                     if _current_user and not _is_admin:
                         _pid = db.get_project_id(proj_name)

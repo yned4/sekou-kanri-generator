@@ -178,3 +178,160 @@ def get_project_id(kojyo_name: str) -> str | None:
     if res.data:
         return res.data[0]["id"]
     return None
+
+
+# ---------------------------------------------------------------------------
+# マッチングセッション（対応表の作業状態永続化）
+# ---------------------------------------------------------------------------
+
+def serialize_session(
+    suryo_info: dict | None,
+    df_match: pd.DataFrame | None,
+    row_selections: dict,
+    confirmed_keys: set,
+    custom_rows: list,
+    selected_idx: int | None,
+    excluded_rows=None,
+) -> dict:
+    """セッション状態をJSON化可能なdictに変換する。"""
+    si_out = None
+    if suryo_info is not None:
+        si_out = {}
+        for k, v in suryo_info.items():
+            if isinstance(v, pd.DataFrame):
+                si_out[k] = {"__df__": True, "data": v.to_dict(orient="records")}
+            else:
+                si_out[k] = v
+    return {
+        "suryo_info": si_out,
+        "df_match": df_match.to_dict(orient="records") if df_match is not None else None,
+        "row_selections": [
+            {"key": list(k), "value": v}
+            for k, v in row_selections.items()
+        ],
+        "confirmed_keys": [list(k) for k in confirmed_keys],
+        "custom_rows": custom_rows,
+        "selected_idx": selected_idx,
+    }
+
+
+def deserialize_session(data: dict) -> dict:
+    """JSON dictをセッション状態に復元する。"""
+    # suryo_info
+    si_raw = data.get("suryo_info")
+    si = None
+    if si_raw is not None:
+        si = {}
+        for k, v in si_raw.items():
+            if isinstance(v, dict) and v.get("__df__"):
+                si[k] = pd.DataFrame(v["data"])
+            else:
+                si[k] = v
+
+    # df_match
+    dm_raw = data.get("df_match")
+    dm = pd.DataFrame(dm_raw) if dm_raw is not None else None
+
+    # row_selections: list of {key, value} → dict with tuple keys
+    rs = {}
+    for item in data.get("row_selections", []):
+        rs[tuple(item["key"])] = item["value"]
+
+    # confirmed_keys: list of lists → set of tuples
+    ck = {tuple(k) for k in data.get("confirmed_keys", [])}
+
+    return {
+        "suryo_info": si,
+        "df_match": dm,
+        "row_selections": rs,
+        "confirmed_keys": ck,
+        "custom_rows": data.get("custom_rows", []),
+        "selected_idx": data.get("selected_idx"),
+    }
+
+
+def save_session(
+    kojyo_name: str,
+    user_id: str | None,
+    state: dict,
+    progress: str = "作業中",
+) -> None:
+    """マッチングセッションを保存（upsert）。"""
+    client = _client()
+    if client is None:
+        return
+    payload = {
+        "kojyo_name": kojyo_name,
+        "state": state,
+        "progress": progress,
+    }
+    if user_id is not None:
+        payload["user_id"] = user_id
+    try:
+        # 既存レコードを確認して update or insert
+        q = client.table("matching_sessions").select("id").eq("kojyo_name", kojyo_name)
+        if user_id is not None:
+            q = q.eq("user_id", user_id)
+        else:
+            q = q.is_("user_id", "null")
+        existing = q.limit(1).execute()
+        if existing.data:
+            client.table("matching_sessions").update(payload).eq(
+                "id", existing.data[0]["id"]
+            ).execute()
+        else:
+            client.table("matching_sessions").insert(payload).execute()
+    except Exception:
+        pass
+
+
+def load_session(kojyo_name: str, user_id: str | None = None) -> dict | None:
+    """マッチングセッションを読み込む。"""
+    client = _client()
+    if client is None:
+        return None
+    try:
+        q = client.table("matching_sessions").select("state").eq("kojyo_name", kojyo_name)
+        if user_id is not None:
+            q = q.eq("user_id", user_id)
+        else:
+            q = q.is_("user_id", "null")
+        res = q.limit(1).execute()
+        if res.data:
+            return res.data[0]["state"]
+    except Exception:
+        pass
+    return None
+
+
+def list_sessions(user_id: str | None = None, role: str | None = None) -> list[dict]:
+    """保存済みセッション一覧を返す（更新日時降順）。"""
+    client = _client()
+    if client is None:
+        return []
+    try:
+        q = client.table("matching_sessions").select(
+            "id, kojyo_name, progress, updated_at"
+        )
+        if user_id is not None and role not in ("admin", None):
+            q = q.eq("user_id", user_id)
+        res = q.order("updated_at", desc=True).execute()
+        return res.data
+    except Exception:
+        return []
+
+
+def delete_session(kojyo_name: str, user_id: str | None = None) -> None:
+    """マッチングセッションを削除する。"""
+    client = _client()
+    if client is None:
+        return
+    try:
+        q = client.table("matching_sessions").delete().eq("kojyo_name", kojyo_name)
+        if user_id is not None:
+            q = q.eq("user_id", user_id)
+        else:
+            q = q.is_("user_id", "null")
+        q.execute()
+    except Exception:
+        pass
