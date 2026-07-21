@@ -1061,7 +1061,7 @@ def _render_matching():
             use_container_width=True, height=560, hide_index=True,
             selection_mode="single-row", on_select="rerun",
             column_config={
-                "工種・項目": st.column_config.TextColumn(width="large"),
+                "工種・項目": st.column_config.TextColumn(width="medium"),
                 "状態":       st.column_config.TextColumn(width="small"),
             },
         )
