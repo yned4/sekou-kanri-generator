@@ -1449,9 +1449,9 @@ def build_match_detail(
             if extra_h:
                 implicit_added = True
 
-        # 撮影箇所の暗黙ルール（implicit_photo）を最初の細別が空のルート行に付与
+        # 撮影箇所の暗黙ルール（implicit_photo）を最初の細別・名称レベル行に付与
         extra_photo = []
-        if implicit_photo_kojyo and not implicit_photo_added and not cd.get("細別", ""):
+        if implicit_photo_kojyo and not implicit_photo_added and _deepest_level(cd) not in ("工種", "種別"):
             extra_photo = [k for k in implicit_photo_kojyo if k not in mp_h]
             if extra_photo:
                 implicit_photo_added = True
