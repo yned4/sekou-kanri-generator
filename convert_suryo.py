@@ -11,6 +11,7 @@ convert_suryo.py
 import sys
 import re
 import io
+import unicodedata
 from pathlib import Path
 from typing import Optional
 
@@ -59,11 +60,12 @@ MAX_WIDTH   = 60
 
 
 def _clean(val) -> str:
-    """None/改行を正規化する。"""
+    """None/改行を正規化し、半角カタカナを全角に変換する。"""
     if val is None:
         return ""
     s = str(val).replace("\n", " ").strip()
-    return re.sub(r"\s+", " ", s)
+    s = re.sub(r"\s+", " ", s)
+    return unicodedata.normalize("NFKC", s)
 
 
 def _is_skip_row(val: str) -> bool:

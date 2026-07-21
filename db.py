@@ -192,6 +192,7 @@ def serialize_session(
     custom_rows: list,
     selected_idx: int | None,
     excluded_rows=None,
+    suryo_df_full: pd.DataFrame | None = None,
 ) -> dict:
     """セッション状態をJSON化可能なdictに変換する。"""
     si_out = None
@@ -212,6 +213,7 @@ def serialize_session(
         "confirmed_keys": [list(k) for k in confirmed_keys],
         "custom_rows": custom_rows,
         "selected_idx": selected_idx,
+        "suryo_df_full": suryo_df_full.to_dict(orient="records") if suryo_df_full is not None else None,
     }
 
 
@@ -240,6 +242,10 @@ def deserialize_session(data: dict) -> dict:
     # confirmed_keys: list of lists → set of tuples
     ck = {tuple(k) for k in data.get("confirmed_keys", [])}
 
+    # suryo_df_full
+    sdf_raw = data.get("suryo_df_full")
+    sdf = pd.DataFrame(sdf_raw) if sdf_raw is not None else None
+
     return {
         "suryo_info": si,
         "df_match": dm,
@@ -247,6 +253,7 @@ def deserialize_session(data: dict) -> dict:
         "confirmed_keys": ck,
         "custom_rows": data.get("custom_rows", []),
         "selected_idx": data.get("selected_idx"),
+        "suryo_df_full": sdf,
     }
 
 

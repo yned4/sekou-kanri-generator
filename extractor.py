@@ -8,6 +8,7 @@ PDFから施工管理計画に必要なデータを抽出する。
 
 import re
 import sys
+import unicodedata as _ud
 import pdfplumber
 import pandas as pd
 
@@ -537,7 +538,7 @@ def _build_suryo_x0_map(page) -> dict:
     result: dict = {}
     for ws in rows.values():
         ws = sorted(ws, key=lambda w: w["x0"])
-        text = _clean(" ".join(w["text"] for w in ws))
+        text = _ud.normalize("NFKC", _clean(" ".join(w["text"] for w in ws)))
         x0   = ws[0]["x0"]
         if text and text not in result:
             result[text] = x0
@@ -610,7 +611,7 @@ def extract_suryo(pdf_path: str) -> dict:
             for row in valid[0][2:]:   # 先頭2行はヘッダー
                 if len(row) <= kojyo_col:
                     continue
-                val = _clean(row[kojyo_col])
+                val = _ud.normalize("NFKC", _clean(row[kojyo_col]))
                 if not val:
                     continue
                 if val.startswith("(") or val.startswith("（"):

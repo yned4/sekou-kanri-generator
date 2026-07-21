@@ -30,6 +30,7 @@ from extractor import (
     SURYO_LEVEL_COLS,
 )
 from excel_writer import write_excel, write_excel_from_dfs, SHEET_HINSHITSU, SHEET_DEKIGATA, SHEET_PHOTO
+from convert_suryo import extract_suryo_full, write_suryo_excel
 from build_db import (
     DB_PATH,
     SHEET_DEKIGATA as DB_DEKIGATA,
@@ -394,6 +395,7 @@ def _auto_save_session():
             confirmed_keys=st.session_state.get("confirmed_keys", set()),
             custom_rows=st.session_state.get("custom_rows", []),
             selected_idx=st.session_state.get("selected_idx"),
+            suryo_df_full=st.session_state.get("suryo_df_full"),
         )
         db.save_session(kojyo_name, user_id, state, progress)
     except Exception:
@@ -413,6 +415,7 @@ def _restore_session_from_db(kojyo_name: str):
     st.session_state.confirmed_keys = restored["confirmed_keys"]
     st.session_state.custom_rows = restored.get("custom_rows", [])
     st.session_state.selected_idx = restored.get("selected_idx")
+    st.session_state.suryo_df_full = restored.get("suryo_df_full")
     st.session_state.excel_cache = None
     st.session_state.excel_fname = None
     # チェックボックスstateをクリア
@@ -748,6 +751,7 @@ def _render_upload():
                         f.write(uploaded.read()); path_tmp = f.name
                     with st.spinner("PDF解析・マッチング中..."):
                         si = extract_suryo(path_tmp)
+                        df_suryo_full = extract_suryo_full(path_tmp)
 
                     # フォントエンコーディング問題の検出
                     if not si.get("pdf_text_readable", True):
@@ -773,6 +777,7 @@ def _render_upload():
                             del st.session_state[k]
                     st.session_state.suryo_info     = si
                     st.session_state.df_match       = dm
+                    st.session_state.suryo_df_full  = df_suryo_full
                     st.session_state.excluded_rows  = si.get("除外行", None)
                     st.session_state.selected_idx   = None
                     st.session_state.row_selections = {}
@@ -860,6 +865,20 @@ def _render_structure():
                     "除外理由": st.column_config.TextColumn("除外理由", width="medium"),
                 },
             )
+
+    # ── 数量総括表Excel ダウンロード ────────────────────────────
+    df_full = st.session_state.get("suryo_df_full")
+    if df_full is not None and not df_full.empty:
+        kojyo_name = si.get("工事名", "数量総括表") if si else "数量総括表"
+        excel_bytes = write_suryo_excel(df_full)
+        st.download_button(
+            label="数量総括表Excelをダウンロード",
+            data=excel_bytes,
+            file_name=f"{kojyo_name}_数量総括表.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+            key="dl_suryo_excel",
+        )
 
     # 下部ナビ
     st.markdown('<div class="page-nav">', unsafe_allow_html=True)
