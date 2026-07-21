@@ -1020,321 +1020,308 @@ def _render_matching():
                              use_container_width=True, key="match_to_output"):
                     st.session_state.page = "output"; st.rerun()
 
-    # フィルタ
+    # ── 左右分割レイアウト ────────────────────────────────────
     sel_idx = st.session_state.selected_idx
     has_sel = sel_idx is not None and 0 <= sel_idx < len(df_raw)
     sel_ckey = _chain_key(df_raw.iloc[sel_idx]) if has_sel else None
     is_sel_confirmed = sel_ckey is not None and sel_ckey in st.session_state.confirmed_keys
 
-    radio_col, undo_col = st.columns([4, 1])
-    with radio_col:
+    FM = {"確定のみ":"確定","要選択のみ":"要選択","未マッチのみ":"未マッチ","対象外のみ":"対象外"}
+
+    left_col, right_col = st.columns([2, 3])
+
+    # ── 左：フィルタ＋テーブル ──────────────────────────────
+    with left_col:
         filter_opt = st.radio(
             "filter", ["すべて","すべて（対象外除く）","要選択のみ","確定のみ","未マッチのみ","対象外のみ"],
             horizontal=True, label_visibility="collapsed",
         )
-    with undo_col:
+
+        if filter_opt in FM:
+            df_v = df_raw[df_raw["状態"]==FM[filter_opt]].copy()
+        elif filter_opt == "すべて（対象外除く）":
+            df_v = df_raw[df_raw["状態"] != "対象外"].copy()
+        else:
+            df_v = df_raw.copy()
+
+        sts_idx = {i: row["状態"] for i,(_,row) in enumerate(df_v.iterrows())}
+        df_tbl = pd.DataFrame({
+            "工種・項目": ["　"*row["_depth"]+row["_name"] for _,row in df_v.iterrows()],
+            "状態":       [row["状態"] for _,row in df_v.iterrows()],
+        })
+
+        def _rs(sts):
+            def _s(row):
+                bg = STATUS_BG.get(sts.get(row.name,""),"")
+                return [f"background-color:{bg}" if bg else "" for _ in row]
+            return _s
+
+        ev = st.dataframe(
+            df_tbl.style.apply(_rs(sts_idx),axis=1),
+            use_container_width=True, height=560, hide_index=True,
+            selection_mode="single-row", on_select="rerun",
+            column_config={
+                "工種・項目": st.column_config.TextColumn(width="large"),
+                "状態":       st.column_config.TextColumn(width="small"),
+            },
+        )
+        if ev.selection.rows:
+            no = int(df_v.iloc[ev.selection.rows[0]]["No"])
+            if st.session_state.selected_idx != no - 1:
+                st.session_state.selected_idx = no - 1
+                st.rerun()
+
+        st.markdown(
+            '<div class="legend">'
+            '<span><span class="ldot" style="background:#8E1119"></span>確定</span>'
+            '<span><span class="ldot" style="background:#C01820"></span>要選択</span>'
+            '<span><span class="ldot" style="background:#9A9893"></span>未マッチ</span>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+    # ── 右：候補パネル ────────────────────────────────────────
+    with right_col:
         if is_sel_confirmed:
             if st.button("確定を取り消す", use_container_width=True, key="unconfirm_top"):
                 st.session_state.confirmed_keys.discard(sel_ckey)
                 st.toast(f"「{df_raw.iloc[sel_idx]['_name']}」の確定を解除しました")
                 st.rerun()
 
-    FM = {"確定のみ":"確定","要選択のみ":"要選択","未マッチのみ":"未マッチ","対象外のみ":"対象外"}
-    if filter_opt in FM:
-        df_v = df_raw[df_raw["状態"]==FM[filter_opt]].copy()
-    elif filter_opt == "すべて（対象外除く）":
-        df_v = df_raw[df_raw["状態"] != "対象外"].copy()
-    else:
-        df_v = df_raw.copy()
-
-    def _fmt(row):
-        d = str(row.get("出来形マッチ","")).strip()
-        h = str(row.get("品質管理マッチ","")).strip()
-        p = str(row.get("撮影箇所マッチ","")).strip()
-        if not (d or h or p): return "—"
-        dl = [x for x in d.split("\n") if x.strip()]
-        cats = (["出来形"] if d else [])+(["品質"] if h else [])+(["撮影"] if p else [])
-        return f"候補{len(dl)}件（工法で分岐）" if len(dl)>=2 else "・".join(cats)
-
-    tbl_h   = 280 if has_sel else 430
-
-    sts_idx = {i: row["状態"] for i,(_,row) in enumerate(df_v.iterrows())}
-    df_tbl = pd.DataFrame({
-        "工種・項目":    ["　"*row["_depth"]+row["_name"] for _,row in df_v.iterrows()],
-        "マッチした基準": [_fmt(row) for _,row in df_v.iterrows()],
-        "状態":         [row["状態"] for _,row in df_v.iterrows()],
-    })
-
-    def _rs(sts):
-        def _s(row):
-            bg = STATUS_BG.get(sts.get(row.name,""),"")
-            return [f"background-color:{bg}" if bg else "" for _ in row]
-        return _s
-
-    ev = st.dataframe(
-        df_tbl.style.apply(_rs(sts_idx),axis=1),
-        use_container_width=True, height=tbl_h, hide_index=True,
-        selection_mode="single-row", on_select="rerun",
-        column_config={
-            "工種・項目":    st.column_config.TextColumn(width="large"),
-            "マッチした基準": st.column_config.TextColumn(width="large"),
-            "状態":         st.column_config.TextColumn(width="small"),
-        },
-    )
-    if ev.selection.rows:
-        no = int(df_v.iloc[ev.selection.rows[0]]["No"])
-        if st.session_state.selected_idx != no - 1:
-            st.session_state.selected_idx = no - 1
-            st.rerun()
-
-    st.markdown(
-        '<div class="legend">'
-        '<span><span class="ldot" style="background:#8E1119"></span>確定</span>'
-        '<span><span class="ldot" style="background:#C01820"></span>要選択（行クリックで候補展開）</span>'
-        '<span><span class="ldot" style="background:#9A9893"></span>未マッチ</span>'
-        '</div>',
-        unsafe_allow_html=True,
-    )
-
-    # 候補パネル（行選択時のみ）
-    if not has_sel:
-        st.markdown(
-            '<div style="margin-top:10px;padding:18px;background:#FFF;'
-            'border:1px dashed #E5E3DC;border-radius:8px;text-align:center;'
-            'color:#9A9893;font-size:.84rem;">'
-            '行をクリックすると候補がここに展開されます</div>',
-            unsafe_allow_html=True,
-        )
-    else:
-        sel   = df_raw.iloc[sel_idx]
-        ckey  = _chain_key(sel)
-        chain = " › ".join(sel[c] for c in SURYO_LEVEL_COLS if sel.get(c,""))
-
-        cur_pos = yo_idxs.index(sel_idx) if sel_idx in yo_idxs else None
-
-        items_d = [x.strip() for x in str(sel.get("出来形マッチ","")).split("\n") if x.strip()]
-        items_h = [x.strip() for x in str(sel.get("品質管理マッチ","")).split("\n") if x.strip()]
-        items_p = [x.strip() for x in str(sel.get("撮影箇所マッチ","")).split("\n") if x.strip()]
-        # 他の確定済み行で選ばれた品質管理ラベル（ラベル→確定行名）
-        _conf_h = _confirmed_h_labels(ckey)
-        items_h_excl = {x: _conf_h[x] for x in items_h if x in _conf_h}  # 除外ラベル→確定行名
-        items_h = [x for x in items_h if x not in _conf_h]
-
-        if not items_d and not items_h and not items_p:
+        if not has_sel:
             st.markdown(
-                f'<div style="margin-top:10px;padding:16px 18px;background:#FEF3C7;'
-                f'border-left:4px solid #F59E0B;border-radius:6px;">'
-                f'<div style="font-size:.88rem;font-weight:700;color:#92400E;margin-bottom:4px;">'
-                f'⚠ 「{sel["_name"]}」— DBにマッチなし</div>'
-                f'<div style="font-size:.80rem;color:#78350F;line-height:1.6;">'
-                f'この工種・種別はDBに登録されていないため候補が見つかりませんでした。<br>'
-                f'必要であれば ④ 出力ページの「手動行の追加」から直接入力してください。</div>'
-                f'</div>',
+                '<div style="margin-top:10px;padding:18px;background:#FFF;'
+                'border:1px dashed #E5E3DC;border-radius:8px;text-align:center;'
+                'color:#9A9893;font-size:.84rem;">'
+                '行をクリックすると候補がここに展開されます</div>',
                 unsafe_allow_html=True,
             )
         else:
-            saved = st.session_state.row_selections.get(ckey)
+            sel   = df_raw.iloc[sel_idx]
+            ckey  = _chain_key(sel)
+            chain = " › ".join(sel[c] for c in SURYO_LEVEL_COLS if sel.get(c,""))
 
-            # ── 全解除フラグの処理 & チェックボックスsession_state初期化
-            # （すべてのウィジェット描画より前に実行）
-            _desel_d = st.session_state.pop(f"_desel_d_{sel_idx}", False)
-            _desel_h = st.session_state.pop(f"_desel_h_{sel_idx}", False)
-            _desel_p = st.session_state.pop(f"_desel_p_{sel_idx}", False)
+            cur_pos = yo_idxs.index(sel_idx) if sel_idx in yo_idxs else None
 
-            if _desel_d or _desel_h or _desel_p:
-                _base = st.session_state.row_selections.get(ckey) or \
-                        {"出来形": items_d, "品質管理": items_h, "撮影箇所": items_p}
-                _upd = {}
-                if _desel_d: _upd["出来形"]   = []
-                if _desel_h: _upd["品質管理"] = []
-                if _desel_p: _upd["撮影箇所"] = []
-                st.session_state.row_selections[ckey] = {**_base, **_upd}
-                saved = st.session_state.row_selections.get(ckey)
+            items_d = [x.strip() for x in str(sel.get("出来形マッチ","")).split("\n") if x.strip()]
+            items_h = [x.strip() for x in str(sel.get("品質管理マッチ","")).split("\n") if x.strip()]
+            items_p = [x.strip() for x in str(sel.get("撮影箇所マッチ","")).split("\n") if x.strip()]
+            # 他の確定済み行で選ばれた品質管理ラベル（ラベル→確定行名）
+            _conf_h = _confirmed_h_labels(ckey)
+            items_h_excl = {x: _conf_h[x] for x in items_h if x in _conf_h}
+            items_h = [x for x in items_h if x not in _conf_h]
 
-            cur_d = saved.get("出来形",   items_d) if saved else items_d
-            cur_h = saved.get("品質管理", items_h) if saved else items_h
-            cur_p = saved.get("撮影箇所", items_p) if saved else items_p
-
-            # 全解除時は強制上書き、初回のみ初期化
-            for _i, _lbl in enumerate(items_d[:4]):
-                _k = f"chk_d_{sel_idx}_{_i}"
-                if _desel_d or _k not in st.session_state:
-                    st.session_state[_k] = _lbl in cur_d
-            for _i, _fl in enumerate(items_h):
-                _k = f"chk_h_{sel_idx}_{_i}"
-                if _desel_h or _k not in st.session_state:
-                    st.session_state[_k] = _fl in cur_h
-            for _i, _fl in enumerate(items_p):
-                _k = f"chk_p_{sel_idx}_{_i}"
-                if _desel_p or _k not in st.session_state:
-                    st.session_state[_k] = _fl in cur_p
-
-            # 進捗＋ナビ（要選択行のみ）
-            if cur_pos is not None and yo_idxs:
-                done  = sum(1 for i in yo_idxs
-                            if _chain_key(df_raw.iloc[i]) in st.session_state.confirmed_keys)
-                total = len(yo_idxs)
-                prog_col, nav_col = st.columns([5, 1])
-                with prog_col:
-                    st.progress(done/total, text=f"要選択 {total} 件中 {done} 件確認済み")
-                with nav_col:
-                    if cur_pos < len(yo_idxs)-1:
-                        if st.button("次へ →", key="cand_next"):
-                            st.session_state.selected_idx = yo_idxs[cur_pos+1]
-                            st.rerun()
-
-            st.markdown(
-                f'<div class="cand-panel">'
-                f'<div class="cand-hdr">要確認: {sel["_name"]}'
-                f'<span style="font-weight:400;font-size:.76rem;margin-left:8px;">{chain}</span>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-
-            # ── 出来形 比較カード ──────────────────────────────────
-            new_sel_d = []
-            if len(items_d) >= 2:
-                db_rows_d = [_lookup_db(lbl,"出来形管理") for lbl in items_d[:4]]
-                diff_d    = _diff_cols(db_rows_d, _DISP_D)
-                cols_c    = st.columns(min(len(items_d),4))
-                for i,(col,lbl) in enumerate(zip(cols_c, items_d[:4])):
-                    with col:
-                        parts  = [p.strip() for p in lbl.split(" / ")]
-                        ctitle = " / ".join(parts[1:]) if len(parts)>1 else parts[0]
-                        is_sel = st.session_state.get(f"chk_d_{sel_idx}_{i}", False)
-                        brd    = "border:1.5px solid #C01820;background:#FBEBEC;" if is_sel else ""
-                        body   = _card_html(db_rows_d[i], _DISP_D, diff_d)
-                        st.markdown(
-                            f'<div class="cand-card" style="{brd}">'
-                            f'<div class="cand-card-title">{i+1}. {ctitle}</div>'
-                            f'<div class="cand-card-body">{body}</div>'
-                            f'</div>',
-                            unsafe_allow_html=True,
-                        )
-                        if st.checkbox("採用", key=f"chk_d_{sel_idx}_{i}"):
-                            new_sel_d.append(lbl)
-                if diff_d:
-                    st.markdown(
-                        f'<div class="cand-foot">ⓘ 差分（{"・".join(sorted(diff_d))}）をハイライト表示</div>',
-                        unsafe_allow_html=True,
-                    )
-                _, _desel_d_col = st.columns([5, 1])
-                with _desel_d_col:
-                    if st.button("全解除", key=f"desel_all_d_{sel_idx}"):
-                        st.session_state[f"_desel_d_{sel_idx}"] = True
-                        st.rerun()
-            elif len(items_d) == 1:
-                lbl    = items_d[0]
-                db_row = _lookup_db(lbl, "出来形管理")
-                parts  = [p.strip() for p in lbl.split(" / ")]
-                ctitle = " / ".join(parts[1:]) if len(parts)>1 else parts[0]
-                body   = _card_html(db_row, _DISP_D, set())
+            if not items_d and not items_h and not items_p:
                 st.markdown(
-                    f'<div class="cand-card" style="border:1.5px solid #C01820;background:#FBEBEC;">'
-                    f'<div class="cand-card-title">出来形基準：{ctitle}</div>'
-                    f'<div class="cand-card-body">{body}</div>'
+                    f'<div style="margin-top:10px;padding:16px 18px;background:#FEF3C7;'
+                    f'border-left:4px solid #F59E0B;border-radius:6px;">'
+                    f'<div style="font-size:.88rem;font-weight:700;color:#92400E;margin-bottom:4px;">'
+                    f'⚠ 「{sel["_name"]}」— DBにマッチなし</div>'
+                    f'<div style="font-size:.80rem;color:#78350F;line-height:1.6;">'
+                    f'この工種・種別はDBに登録されていないため候補が見つかりませんでした。<br>'
+                    f'必要であれば ④ 出力ページの「手動行の追加」から直接入力してください。</div>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
-                new_sel_d = items_d
+            else:
+                saved = st.session_state.row_selections.get(ckey)
 
-            st.markdown('</div>', unsafe_allow_html=True)
+                # ── 全解除フラグの処理 & チェックボックスsession_state初期化
+                _desel_d = st.session_state.pop(f"_desel_d_{sel_idx}", False)
+                _desel_h = st.session_state.pop(f"_desel_h_{sel_idx}", False)
+                _desel_p = st.session_state.pop(f"_desel_p_{sel_idx}", False)
 
-            # 品質・撮影 expander
-            new_sel_h, new_sel_p = items_h, items_p
-            if items_h or items_p:
-                with st.expander("品質管理・撮影箇所の候補を調整"):
-                    ch,cp = st.columns(2)
-                    with ch:
-                        new_sel_h = []
-                        if items_h or items_h_excl:
-                            hdr_h, btn_h = st.columns([4, 1])
-                            with hdr_h:
-                                _sublabel("品質管理")
-                            with btn_h:
-                                if st.button("全解除", key=f"desel_all_h_{sel_idx}", use_container_width=True):
-                                    st.session_state[f"_desel_h_{sel_idx}"] = True
-                                    st.rerun()
-                            for kojyo,sub in _group_items(items_h).items():
-                                if len(_group_items(items_h))>1: st.caption(kojyo)
-                                for fl,dl in sub:
-                                    idx = items_h.index(fl)
-                                    if st.checkbox(dl, key=f"chk_h_{sel_idx}_{idx}"):
-                                        new_sel_h.append(fl)
-                            # 他の確定済み行で使用中のラベルをグレー表示
-                            if items_h_excl:
-                                excl_lines = "".join(
-                                    f'<div style="color:#9A9893;font-size:.82rem;padding:2px 0;">'
-                                    f'☑ {lbl.split(" / ")[-1]}'
-                                    f'<span style="font-size:.76rem;margin-left:6px;">'
-                                    f'（「{by}」で確定済み）</span></div>'
-                                    for lbl, by in items_h_excl.items()
-                                )
-                                st.markdown(excl_lines, unsafe_allow_html=True)
+                if _desel_d or _desel_h or _desel_p:
+                    _base = st.session_state.row_selections.get(ckey) or \
+                            {"出来形": items_d, "品質管理": items_h, "撮影箇所": items_p}
+                    _upd = {}
+                    if _desel_d: _upd["出来形"]   = []
+                    if _desel_h: _upd["品質管理"] = []
+                    if _desel_p: _upd["撮影箇所"] = []
+                    st.session_state.row_selections[ckey] = {**_base, **_upd}
+                    saved = st.session_state.row_selections.get(ckey)
+
+                cur_d = saved.get("出来形",   items_d) if saved else items_d
+                cur_h = saved.get("品質管理", items_h) if saved else items_h
+                cur_p = saved.get("撮影箇所", items_p) if saved else items_p
+
+                for _i, _lbl in enumerate(items_d[:4]):
+                    _k = f"chk_d_{sel_idx}_{_i}"
+                    if _desel_d or _k not in st.session_state:
+                        st.session_state[_k] = _lbl in cur_d
+                for _i, _fl in enumerate(items_h):
+                    _k = f"chk_h_{sel_idx}_{_i}"
+                    if _desel_h or _k not in st.session_state:
+                        st.session_state[_k] = _fl in cur_h
+                for _i, _fl in enumerate(items_p):
+                    _k = f"chk_p_{sel_idx}_{_i}"
+                    if _desel_p or _k not in st.session_state:
+                        st.session_state[_k] = _fl in cur_p
+
+                # 進捗＋ナビ（要選択行のみ）
+                if cur_pos is not None and yo_idxs:
+                    done  = sum(1 for i in yo_idxs
+                                if _chain_key(df_raw.iloc[i]) in st.session_state.confirmed_keys)
+                    total = len(yo_idxs)
+                    prog_col, nav_col = st.columns([5, 1])
+                    with prog_col:
+                        st.progress(done/total, text=f"要選択 {total} 件中 {done} 件確認済み")
+                    with nav_col:
+                        if cur_pos < len(yo_idxs)-1:
+                            if st.button("次へ →", key="cand_next"):
+                                st.session_state.selected_idx = yo_idxs[cur_pos+1]
+                                st.rerun()
+
+                st.markdown(
+                    f'<div class="cand-panel">'
+                    f'<div class="cand-hdr">要確認: {sel["_name"]}'
+                    f'<span style="font-weight:400;font-size:.76rem;margin-left:8px;">{chain}</span>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+
+                # ── 出来形 比較カード ──────────────────────────────────
+                new_sel_d = []
+                if len(items_d) >= 2:
+                    db_rows_d = [_lookup_db(lbl,"出来形管理") for lbl in items_d[:4]]
+                    diff_d    = _diff_cols(db_rows_d, _DISP_D)
+                    cols_c    = st.columns(min(len(items_d),4))
+                    for i,(col,lbl) in enumerate(zip(cols_c, items_d[:4])):
+                        with col:
+                            parts  = [p.strip() for p in lbl.split(" / ")]
+                            ctitle = " / ".join(parts[1:]) if len(parts)>1 else parts[0]
+                            is_sel = st.session_state.get(f"chk_d_{sel_idx}_{i}", False)
+                            brd    = "border:1.5px solid #C01820;background:#FBEBEC;" if is_sel else ""
+                            body   = _card_html(db_rows_d[i], _DISP_D, diff_d)
+                            st.markdown(
+                                f'<div class="cand-card" style="{brd}">'
+                                f'<div class="cand-card-title">{i+1}. {ctitle}</div>'
+                                f'<div class="cand-card-body">{body}</div>'
+                                f'</div>',
+                                unsafe_allow_html=True,
+                            )
+                            if st.checkbox("採用", key=f"chk_d_{sel_idx}_{i}"):
+                                new_sel_d.append(lbl)
+                    if diff_d:
+                        st.markdown(
+                            f'<div class="cand-foot">ⓘ 差分（{"・".join(sorted(diff_d))}）をハイライト表示</div>',
+                            unsafe_allow_html=True,
+                        )
+                    _, _desel_d_col = st.columns([5, 1])
+                    with _desel_d_col:
+                        if st.button("全解除", key=f"desel_all_d_{sel_idx}"):
+                            st.session_state[f"_desel_d_{sel_idx}"] = True
+                            st.rerun()
+                elif len(items_d) == 1:
+                    lbl    = items_d[0]
+                    db_row = _lookup_db(lbl, "出来形管理")
+                    parts  = [p.strip() for p in lbl.split(" / ")]
+                    ctitle = " / ".join(parts[1:]) if len(parts)>1 else parts[0]
+                    body   = _card_html(db_row, _DISP_D, set())
+                    st.markdown(
+                        f'<div class="cand-card" style="border:1.5px solid #C01820;background:#FBEBEC;">'
+                        f'<div class="cand-card-title">出来形基準：{ctitle}</div>'
+                        f'<div class="cand-card-body">{body}</div>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+                    new_sel_d = items_d
+
+                st.markdown('</div>', unsafe_allow_html=True)
+
+                # 品質・撮影 expander
+                new_sel_h, new_sel_p = items_h, items_p
+                if items_h or items_p:
+                    with st.expander("品質管理・撮影箇所の候補を調整"):
+                        ch,cp = st.columns(2)
+                        with ch:
+                            new_sel_h = []
+                            if items_h or items_h_excl:
+                                hdr_h, btn_h = st.columns([4, 1])
+                                with hdr_h:
+                                    _sublabel("品質管理")
+                                with btn_h:
+                                    if st.button("全解除", key=f"desel_all_h_{sel_idx}", use_container_width=True):
+                                        st.session_state[f"_desel_h_{sel_idx}"] = True
+                                        st.rerun()
+                                for kojyo,sub in _group_items(items_h).items():
+                                    if len(_group_items(items_h))>1: st.caption(kojyo)
+                                    for fl,dl in sub:
+                                        idx = items_h.index(fl)
+                                        if st.checkbox(dl, key=f"chk_h_{sel_idx}_{idx}"):
+                                            new_sel_h.append(fl)
+                                if items_h_excl:
+                                    excl_lines = "".join(
+                                        f'<div style="color:#9A9893;font-size:.82rem;padding:2px 0;">'
+                                        f'☑ {lbl.split(" / ")[-1]}'
+                                        f'<span style="font-size:.76rem;margin-left:6px;">'
+                                        f'（「{by}」で確定済み）</span></div>'
+                                        for lbl, by in items_h_excl.items()
+                                    )
+                                    st.markdown(excl_lines, unsafe_allow_html=True)
+                            else:
+                                st.caption("該当なし")
+                        with cp:
+                            new_sel_p = []
+                            if items_p:
+                                hdr_p, btn_p = st.columns([4, 1])
+                                with hdr_p:
+                                    _sublabel("撮影箇所")
+                                with btn_p:
+                                    if st.button("全解除", key=f"desel_all_p_{sel_idx}", use_container_width=True):
+                                        st.session_state[f"_desel_p_{sel_idx}"] = True
+                                        st.rerun()
+                                for kojyo,sub in _group_items(items_p).items():
+                                    if len(_group_items(items_p))>1: st.caption(kojyo)
+                                    for fl,dl in sub:
+                                        idx = items_p.index(fl)
+                                        if st.checkbox(dl, key=f"chk_p_{sel_idx}_{idx}"):
+                                            new_sel_p.append(fl)
+                            else:
+                                st.caption("該当なし")
+
+                st.session_state.row_selections[ckey] = {
+                    "出来形":  new_sel_d,
+                    "品質管理": new_sel_h,
+                    "撮影箇所": new_sel_p,
+                }
+
+                # ── 確定して次へ ──────────────────────────────────────
+                if cur_pos is not None:
+                    btn_col, _ = st.columns([2, 5])
+                    with btn_col:
+                        if cur_pos < len(yo_idxs) - 1:
+                            if st.button("確定して次へ →", type="primary",
+                                         use_container_width=True, key="confirm_next_btn"):
+                                st.session_state.confirmed_keys.add(ckey)
+                                _auto_save_session()
+                                st.toast(f"「{sel['_name']}」を確定しました")
+                                st.session_state.selected_idx = yo_idxs[cur_pos + 1]
+                                st.rerun()
                         else:
-                            st.caption("該当なし")
-                    with cp:
-                        new_sel_p = []
-                        if items_p:
-                            hdr_p, btn_p = st.columns([4, 1])
-                            with hdr_p:
-                                _sublabel("撮影箇所")
-                            with btn_p:
-                                if st.button("全解除", key=f"desel_all_p_{sel_idx}", use_container_width=True):
-                                    st.session_state[f"_desel_p_{sel_idx}"] = True
-                                    st.rerun()
-                            for kojyo,sub in _group_items(items_p).items():
-                                if len(_group_items(items_p))>1: st.caption(kojyo)
-                                for fl,dl in sub:
-                                    idx = items_p.index(fl)
-                                    if st.checkbox(dl, key=f"chk_p_{sel_idx}_{idx}"):
-                                        new_sel_p.append(fl)
-                        else:
-                            st.caption("該当なし")
-
-            st.session_state.row_selections[ckey] = {
-                "出来形":  new_sel_d,
-                "品質管理": new_sel_h,
-                "撮影箇所": new_sel_p,
-            }
-
-            # ── 確定して次へ ──────────────────────────────────────
-            if cur_pos is not None:
-                btn_col, _ = st.columns([2, 5])
-                with btn_col:
-                    if cur_pos < len(yo_idxs) - 1:
-                        if st.button("確定して次へ →", type="primary",
-                                     use_container_width=True, key="confirm_next_btn"):
+                            if st.button("確定（最終項目）✓", type="primary",
+                                         use_container_width=True, key="confirm_last_btn"):
+                                st.session_state.confirmed_keys.add(ckey)
+                                _auto_save_session()
+                                st.toast("すべての要選択を確認しました。④出力へ進んでください。")
+                                st.rerun()
+                elif is_sel_confirmed:
+                    btn_col, _ = st.columns([2, 5])
+                    with btn_col:
+                        if st.button("確定（内容を更新）✓", type="primary",
+                                     use_container_width=True, key="reconfirm_btn"):
                             st.session_state.confirmed_keys.add(ckey)
                             _auto_save_session()
-                            st.toast(f"「{sel['_name']}」を確定しました")
-                            st.session_state.selected_idx = yo_idxs[cur_pos + 1]
+                            st.toast(f"「{sel['_name']}」の内容を更新しました")
                             st.rerun()
-                    else:
-                        if st.button("確定（最終項目）✓", type="primary",
-                                     use_container_width=True, key="confirm_last_btn"):
-                            st.session_state.confirmed_keys.add(ckey)
-                            _auto_save_session()
-                            st.toast("すべての要選択を確認しました。④出力へ進んでください。")
-                            st.rerun()
-            elif is_sel_confirmed:
-                # 確定済み行を遡って閲覧中 → 内容更新用の再確定ボタンを表示
-                btn_col, _ = st.columns([2, 5])
-                with btn_col:
-                    if st.button("確定（内容を更新）✓", type="primary",
-                                 use_container_width=True, key="reconfirm_btn"):
-                        st.session_state.confirmed_keys.add(ckey)
-                        _auto_save_session()
-                        st.toast(f"「{sel['_name']}」の内容を更新しました")
-                        st.rerun()
 
-            if items_d:
-                fd = items_d[0].split(" / ")[0]
-                dr = kojyo_data["出来形管理"][kojyo_data["出来形管理"]["工種"]==fd]
-                if not dr.empty:
-                    r  = dr.iloc[0]
-                    bc = " › ".join(x for x in [r.get("編",""),r.get("章",""),r.get("節",""),fd] if x)
-                    st.caption(f"DB 目次：{bc}")
+                if items_d:
+                    fd = items_d[0].split(" / ")[0]
+                    dr = kojyo_data["出来形管理"][kojyo_data["出来形管理"]["工種"]==fd]
+                    if not dr.empty:
+                        r  = dr.iloc[0]
+                        bc = " › ".join(x for x in [r.get("編",""),r.get("章",""),r.get("節",""),fd] if x)
+                        st.caption(f"DB 目次：{bc}")
 
     # ── ページ下部ナビ（常時表示） ────────────────────────────
     st.markdown('<div class="page-nav">', unsafe_allow_html=True)
