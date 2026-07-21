@@ -1288,6 +1288,16 @@ def _render_matching():
                             _auto_save_session()
                             st.toast("すべての要選択を確認しました。④出力へ進んでください。")
                             st.rerun()
+            elif is_sel_confirmed:
+                # 確定済み行を遡って閲覧中 → 内容更新用の再確定ボタンを表示
+                btn_col, _ = st.columns([2, 5])
+                with btn_col:
+                    if st.button("確定（内容を更新）✓", type="primary",
+                                 use_container_width=True, key="reconfirm_btn"):
+                        st.session_state.confirmed_keys.add(ckey)
+                        _auto_save_session()
+                        st.toast(f"「{sel['_name']}」の内容を更新しました")
+                        st.rerun()
 
             if items_d:
                 fd = items_d[0].split(" / ")[0]
