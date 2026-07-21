@@ -1378,10 +1378,21 @@ def build_match_detail(
             if menkanri_variants:
                 _menkanri_map[k] = menkanri_variants
 
+    def _deepest_level(cd: dict) -> str:
+        """チェーン行の最深レベル（値が入っている最も深い列名）を返す。"""
+        for level in reversed(SURYO_LEVEL_COLS):
+            if cd.get(level, "").strip():
+                return level
+        return ""
+
     # ── 1st pass: 全チェーンのマッチングを実行し、候補を収集 ──
     chain_results = []
     for _, chain in chains.iterrows():
         cd = chain.to_dict()
+        # 工種・種別レベルの行はマッチングしない（細別・名称が空 = 親階層行）
+        if _deepest_level(cd) in ("工種", "種別"):
+            chain_results.append((cd, [], "", [], "", [], []))
+            continue
         md, md_level = _match_chain(cd, norm_d)
         # 通常版がマッチした場合、対応する面管理版も候補に追加
         menkanri_extra = []

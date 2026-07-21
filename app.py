@@ -449,6 +449,9 @@ def _sublabel(label):
     st.markdown(f'<div class="sublabel">{label}</div>', unsafe_allow_html=True)
 
 def _calc_status(row):
+    # 細別・名称が両方空 → 工種・種別レベルの親階層行 → マッチング対象外
+    if not str(row.get("細別","")).strip() and not str(row.get("名称","")).strip():
+        return "対象外"
     has = (bool(str(row.get("出来形マッチ","")).strip()) or
            bool(str(row.get("品質管理マッチ","")).strip()) or
            bool(str(row.get("撮影箇所マッチ","")).strip()))
@@ -456,7 +459,7 @@ def _calc_status(row):
     if _chain_key(row) in st.session_state.confirmed_keys: return "確定"
     return "要選択"
 
-STATUS_BG = {"確定":"#FFFFFF","要選択":"#FBEBEC","未マッチ":"#F1EFE8"}
+STATUS_BG = {"確定":"#FFFFFF","要選択":"#FBEBEC","未マッチ":"#F1EFE8","対象外":"#F5F5F5"}
 
 # ─── DB ルックアップ ─────────────────────────────────────────
 _DISP_D = ["測定項目","規格値","管理基準値","測定頻度","摘要"]
@@ -808,7 +811,7 @@ def _render_structure():
 
     df_raw = _get_df_raw()
 
-    DOT_COLOR = {"確定":"#8E1119","要選択":"#C01820","未マッチ":"#9A9893"}
+    DOT_COLOR = {"確定":"#8E1119","要選択":"#C01820","未マッチ":"#9A9893","対象外":"#CCCCCC"}
 
     # テーブルとして表示
     df_disp = pd.DataFrame({
@@ -817,7 +820,7 @@ def _render_structure():
     })
     sts_idx = {i: row["状態"] for i,(_,row) in enumerate(df_raw.iterrows())}
 
-    STATUS_BG2 = {"確定":"#FFFFFF","要選択":"#FBEBEC","未マッチ":"#F1EFE8"}
+    STATUS_BG2 = {"確定":"#FFFFFF","要選択":"#FBEBEC","未マッチ":"#F1EFE8","対象外":"#F5F5F5"}
     def _rs(sts):
         def _s(row):
             bg = STATUS_BG2.get(sts.get(row.name,""),"")
@@ -837,6 +840,7 @@ def _render_structure():
         '<span><span class="ldot" style="background:#8E1119"></span>確定</span>'
         '<span><span class="ldot" style="background:#C01820"></span>要選択</span>'
         '<span><span class="ldot" style="background:#9A9893"></span>未マッチ</span>'
+        '<span><span class="ldot" style="background:#CCCCCC"></span>対象外</span>'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -901,6 +905,7 @@ def _render_matching():
     n_kaku = int((df_raw["状態"]=="確定").sum())
     n_yo   = int((df_raw["状態"]=="要選択").sum())
     n_mi   = int((df_raw["状態"]=="未マッチ").sum())
+    n_tg   = int((df_raw["状態"]=="対象外").sum())
 
     # 要対応キュー情報（ページ全体で使用）
     yo_idxs = [i for i,(_,r) in enumerate(df_raw.iterrows()) if r["状態"]=="要選択"]
@@ -925,6 +930,8 @@ def _render_matching():
         f'<div class="m-lbl">要選択</div></div>'
         f'<div class="m-card mi"><div class="m-val">{n_mi}</div>'
         f'<div class="m-lbl">未マッチ</div></div>'
+        f'<div class="m-card" style="border-color:#CCCCCC;"><div class="m-val" style="color:#999;">{n_tg}</div>'
+        f'<div class="m-lbl" style="color:#999;">対象外</div></div>'
         f'</div>',
         unsafe_allow_html=True,
     )
@@ -995,7 +1002,7 @@ def _render_matching():
     radio_col, undo_col = st.columns([4, 1])
     with radio_col:
         filter_opt = st.radio(
-            "filter", ["すべて","要選択のみ","確定のみ","未マッチのみ"],
+            "filter", ["すべて","すべて（対象外除く）","要選択のみ","確定のみ","未マッチのみ","対象外のみ"],
             horizontal=True, label_visibility="collapsed",
         )
     with undo_col:
@@ -1005,9 +1012,13 @@ def _render_matching():
                 st.toast(f"「{df_raw.iloc[sel_idx]['_name']}」の確定を解除しました")
                 st.rerun()
 
-    FM = {"確定のみ":"確定","要選択のみ":"要選択","未マッチのみ":"未マッチ"}
-    df_v = (df_raw[df_raw["状態"]==FM[filter_opt]].copy()
-            if filter_opt in FM else df_raw.copy())
+    FM = {"確定のみ":"確定","要選択のみ":"要選択","未マッチのみ":"未マッチ","対象外のみ":"対象外"}
+    if filter_opt in FM:
+        df_v = df_raw[df_raw["状態"]==FM[filter_opt]].copy()
+    elif filter_opt == "すべて（対象外除く）":
+        df_v = df_raw[df_raw["状態"] != "対象外"].copy()
+    else:
+        df_v = df_raw.copy()
 
     def _fmt(row):
         d = str(row.get("出来形マッチ","")).strip()
@@ -1861,6 +1872,7 @@ def _render_output():
     n_kaku = int((df_tmp["状態"] == "確定").sum())
     n_yo   = int((df_tmp["状態"] == "要選択").sum())
     n_mi   = int((df_tmp["状態"] == "未マッチ").sum())
+    n_tg   = int((df_tmp["状態"] == "対象外").sum())
 
     # ── マッチング状況サマリー ────────────────────────────────
     st.markdown(
@@ -1871,6 +1883,8 @@ def _render_output():
         f'<div class="m-lbl">要選択</div></div>'
         f'<div class="m-card mi"><div class="m-val">{n_mi}</div>'
         f'<div class="m-lbl">未マッチ</div></div>'
+        f'<div class="m-card" style="border-color:#CCCCCC;"><div class="m-val" style="color:#999;">{n_tg}</div>'
+        f'<div class="m-lbl" style="color:#999;">対象外</div></div>'
         f'</div>',
         unsafe_allow_html=True,
     )
