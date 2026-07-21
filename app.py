@@ -1021,6 +1021,15 @@ def _render_matching():
                     st.session_state.page = "output"; st.rerun()
 
     # ── 左右分割レイアウト ────────────────────────────────────
+    # 未選択のとき最初の要選択行を自動選択
+    if st.session_state.selected_idx is None and yo_idxs:
+        first_unc = next(
+            (i for i in yo_idxs
+             if _chain_key(df_raw.iloc[i]) not in st.session_state.confirmed_keys),
+            yo_idxs[0],
+        )
+        st.session_state.selected_idx = first_unc
+
     sel_idx = st.session_state.selected_idx
     has_sel = sel_idx is not None and 0 <= sel_idx < len(df_raw)
     sel_ckey = _chain_key(df_raw.iloc[sel_idx]) if has_sel else None
@@ -1169,10 +1178,10 @@ def _render_matching():
 
                 st.markdown('</div>', unsafe_allow_html=True)
 
-                # ── 出来形 expander ────────────────────────────────────
+                # ── ① 出来形 expander ─────────────────────────────────
                 new_sel_d = []
                 if len(items_d) >= 2:
-                    with st.expander("出来形の候補を調整", expanded=True):
+                    with st.expander("① 出来形の採用を確認", expanded=True):
                         db_rows_d = [_lookup_db(lbl,"出来形管理") for lbl in items_d[:4]]
                         diff_d    = _diff_cols(db_rows_d, _DISP_D)
                         for i, lbl in enumerate(items_d[:4]):
@@ -1205,17 +1214,17 @@ def _render_matching():
                     parts  = [p.strip() for p in lbl.split(" / ")]
                     ctitle = " / ".join(parts[1:]) if len(parts)>1 else parts[0]
                     body   = _card_html(db_row, _DISP_D, set())
-                    with st.expander(f"出来形基準：{ctitle}", expanded=True):
+                    with st.expander(f"① 出来形基準：{ctitle}", expanded=True):
                         st.markdown(
                             f'<div class="cand-card-body">{body}</div>',
                             unsafe_allow_html=True,
                         )
                     new_sel_d = items_d
 
-                # 品質・撮影 expander
+                # ── ② 品質・撮影 expander ─────────────────────────────
                 new_sel_h, new_sel_p = items_h, items_p
                 if items_h or items_p:
-                    with st.expander("品質管理・撮影箇所の候補を調整"):
+                    with st.expander("② 品質管理・撮影箇所を確認"):
                         ch,cp = st.columns(2)
                         with ch:
                             new_sel_h = []
@@ -1269,8 +1278,14 @@ def _render_matching():
                     "撮影箇所": new_sel_p,
                 }
 
-                # ── 確定アクション ────────────────────────────────────
-                st.markdown("<div style='margin-top:12px;'>", unsafe_allow_html=True)
+                # ── ③ 確定アクション ──────────────────────────────────
+                st.markdown(
+                    '<div style="margin-top:16px;padding-top:12px;'
+                    'border-top:2px solid #E5E3DC;font-size:.72rem;'
+                    'font-weight:700;color:#9A9893;letter-spacing:.08em;'
+                    'margin-bottom:6px;">③ 確定</div>',
+                    unsafe_allow_html=True,
+                )
                 confirm_col = st.container()
 
                 with confirm_col:
