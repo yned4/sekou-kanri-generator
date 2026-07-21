@@ -48,7 +48,7 @@ KOJYO_X_MAX = 230
 LEVEL_COLS = ["工種", "種別", "細別", "名称"]
 
 # 出力列
-OUT_COLS = ["工事名", "工種", "種別", "細別", "名称", "規格", "単位", "数量（今回）"]
+OUT_COLS = ["工種", "種別", "細別", "名称", "規格", "単位", "数量（今回）"]
 
 # スタイル定数
 HEADER_BG   = "D1D1D1"   # グレースケール82%
@@ -215,7 +215,6 @@ def _build_hierarchy(records: list[dict]) -> pd.DataFrame:
         prev_level = level
 
         rows.append({
-            "工事名":      r["工事名"],
             "工種":        current[0],
             "種別":        current[1],
             "細別":        current[2],
@@ -239,7 +238,7 @@ def extract_suryo_full(pdf_path: str) -> pd.DataFrame:
     x座標から工種/種別/細別/名称の4階層を判定する。
 
     Returns:
-        列: 工事名, 工種, 種別, 細別, 名称, 規格, 単位, 数量（今回）
+        列: 工種, 種別, 細別, 名称, 規格, 単位, 数量（今回）
     """
     all_records: list[dict] = []
 
