@@ -1193,6 +1193,11 @@ def _render_matching():
                                 f'<div class="cand-foot">ⓘ 差分（{"・".join(sorted(diff_d))}）をハイライト表示</div>',
                                 unsafe_allow_html=True,
                             )
+                        _, _d_desel_col = st.columns([3, 1])
+                        with _d_desel_col:
+                            if st.button("全解除", use_container_width=True, key=f"desel_all_d_{sel_idx}"):
+                                st.session_state[f"_desel_d_{sel_idx}"] = True
+                                st.rerun()
                 elif len(items_d) == 1:
                     lbl    = items_d[0]
                     db_row = _lookup_db(lbl, "出来形管理")
@@ -1265,14 +1270,7 @@ def _render_matching():
 
                 # ── 確定アクション ────────────────────────────────────
                 st.markdown("<div style='margin-top:12px;'>", unsafe_allow_html=True)
-                if len(items_d) >= 2:
-                    desel_col, confirm_col = st.columns([1, 3])
-                    with desel_col:
-                        if st.button("全解除", use_container_width=True, key=f"desel_all_d_{sel_idx}"):
-                            st.session_state[f"_desel_d_{sel_idx}"] = True
-                            st.rerun()
-                else:
-                    confirm_col = st.container()
+                confirm_col = st.container()
 
                 with confirm_col:
                     if cur_pos is not None:
