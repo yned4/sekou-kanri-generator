@@ -1063,7 +1063,14 @@ def _render_matching():
     else:
         df_v = df_raw.copy()
 
-    left_col, right_col = st.columns([2, 3])
+    left_col, arrow_col, right_col = st.columns([2, 0.15, 3])
+
+    with arrow_col:
+        st.markdown(
+            '<div style="display:flex;align-items:center;justify-content:center;'
+            'height:100%;min-height:300px;font-size:1.4rem;color:#D1CFC8;">›</div>',
+            unsafe_allow_html=True,
+        )
 
     # ── 左：テーブル ─────────────────────────────────────────
     with left_col:
