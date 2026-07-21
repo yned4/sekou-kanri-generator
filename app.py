@@ -270,6 +270,7 @@ hr{border-color:#E5E3DC!important;}
 .step-label.done{color:#8E1119;}
 .step-label.active{color:#C01820;}
 .step-label.future{color:#9A9893;}
+.step-progress{font-size:.70rem;color:#C01820;font-weight:700;margin-top:3px;white-space:nowrap;}
 
 /* ── ページ下部ナビ ──────────────────────────────────────── */
 .page-nav{
@@ -286,7 +287,7 @@ _STEP_ORDER  = ["upload", "structure", "matching", "output"]
 _STEP_LABELS = ["① 取込", "② 構造化", "③ マッチング", "④ 出力"]
 
 
-def _render_step_bar(current_page: str) -> None:
+def _render_step_bar(current_page: str, progress_text: str = "") -> None:
     """メインエリア上部のステップ進捗インジケータを描画する。"""
     cur_i = _STEP_ORDER.index(current_page) if current_page in _STEP_ORDER else 0
 
@@ -299,10 +300,12 @@ def _render_step_bar(current_page: str) -> None:
         else:
             state, symbol = "future", str(i + 1)
 
+        progress_html = f'<div class="step-progress">{progress_text}</div>' if (state == "active" and progress_text) else ""
         html += (
             f'<div class="step-item">'
             f'<div class="step-circle {state}">{symbol}</div>'
             f'<div class="step-label {state}">{label}</div>'
+            f'{progress_html}'
             f'</div>'
         )
         if i < len(_STEP_LABELS) - 1:
@@ -919,7 +922,6 @@ def _render_structure():
 # ③ マッチング＋候補選択（同一ページ）
 # ===========================================================================
 def _render_matching():
-    _render_step_bar("matching")
     df_raw = _get_df_raw()
     n_kaku = int((df_raw["状態"]=="確定").sum())
     n_yo   = int((df_raw["状態"]=="要選択").sum())
@@ -931,6 +933,9 @@ def _render_matching():
     confirmed_yo = sum(1 for i in yo_idxs
                        if _chain_key(df_raw.iloc[i]) in st.session_state.confirmed_keys)
     remaining = n_yo - confirmed_yo
+
+    _progress_text = f"{confirmed_yo}/{n_yo}件確定" if n_yo > 0 else ("完了" if n_kaku > 0 else "")
+    _render_step_bar("matching", progress_text=_progress_text)
 
     st.markdown(
         '<div class="page-card">'
@@ -954,6 +959,16 @@ def _render_matching():
         f'</div>',
         unsafe_allow_html=True,
     )
+
+    if n_mi > 0:
+        st.markdown(
+            f'<div style="margin:8px 0 4px;padding:10px 14px;background:#FEF3C7;'
+            f'border-left:4px solid #F59E0B;border-radius:4px;'
+            f'font-size:.84rem;color:#92400E;">'
+            f'⚠ <strong>未マッチ {n_mi} 件</strong> — DBに登録のない工種が含まれています。'
+            f'出力後に手動で追記するか、手動行追加機能をご利用ください。</div>',
+            unsafe_allow_html=True,
+        )
 
     # ── 全確定バナー（要選択がゼロになったとき） ─────────────
     if n_yo == 0 and (n_kaku > 0 or n_mi > 0):
@@ -1116,9 +1131,14 @@ def _render_matching():
 
         if not items_d and not items_h and not items_p:
             st.markdown(
-                f'<div style="margin-top:10px;padding:14px;background:#F4F2EE;'
-                f'border:1px solid #E5E3DC;border-radius:8px;font-size:.84rem;color:#9A9893;">'
-                f'「{sel["_name"]}」はDBマッチなし（未マッチ）</div>',
+                f'<div style="margin-top:10px;padding:16px 18px;background:#FEF3C7;'
+                f'border-left:4px solid #F59E0B;border-radius:6px;">'
+                f'<div style="font-size:.88rem;font-weight:700;color:#92400E;margin-bottom:4px;">'
+                f'⚠ 「{sel["_name"]}」— DBにマッチなし</div>'
+                f'<div style="font-size:.80rem;color:#78350F;line-height:1.6;">'
+                f'この工種・種別はDBに登録されていないため候補が見つかりませんでした。<br>'
+                f'必要であれば ④ 出力ページの「手動行の追加」から直接入力してください。</div>'
+                f'</div>',
                 unsafe_allow_html=True,
             )
         else:
@@ -1336,6 +1356,34 @@ def _render_matching():
                      use_container_width=True, key="match_next"):
             st.session_state.page = "output"; st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
+
+    # ── キーボードショートカット ─────────────────────────────
+    import streamlit.components.v1 as components
+    components.html("""
+<script>
+(function() {
+    var doc = window.parent.document;
+    var key = '__kb_matching_bound__';
+    if (doc[key]) return;
+    doc[key] = true;
+    doc.addEventListener('keydown', function(e) {
+        // テキスト入力中は無視
+        var t = e.target;
+        if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) return;
+        if (e.key === 'Enter') {
+            // primary ボタン（確定して次へ / 確定）を押す
+            var btns = doc.querySelectorAll('[data-testid="baseButton-primary"]');
+            if (btns.length) { btns[btns.length - 1].click(); e.preventDefault(); }
+        } else if (e.key === 'ArrowRight') {
+            // 「次へ →」ボタンを探してクリック
+            var allBtns = Array.from(doc.querySelectorAll('button'));
+            var nb = allBtns.find(function(b) { return b.textContent.trim().startsWith('次へ'); });
+            if (nb) { nb.click(); e.preventDefault(); }
+        }
+    });
+})();
+</script>
+""", height=0)
 
 
 # ===========================================================================
