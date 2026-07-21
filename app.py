@@ -191,10 +191,10 @@ hr{border-color:#E5E3DC!important;}
 .m-val{font-size:2rem;font-weight:800;line-height:1;}
 .m-lbl{font-size:.70rem;font-weight:600;color:#6B6A66;
         text-transform:uppercase;letter-spacing:.07em;}
-.m-card.kaku{border-left:3px solid #8E1119;background:#FFFFFF;} .m-card.kaku .m-val{color:#8E1119;}
-.m-card.yo  {border-left:3px solid #C01820;background:#FBEBEC;} .m-card.yo   .m-val{color:#C01820;}
-.m-card.mi  {border-left:3px solid #9A9893;background:#F1EFE8;} .m-card.mi   .m-val{color:#9A9893;}
-.m-card.tg  {border-left:3px solid #CCCCCC;background:#F5F5F5;} .m-card.tg   .m-val{color:#999;}
+.m-card.kaku{border-left:3px solid #8E1119;background:#FFFFFF;} .m-card.kaku .m-val{color:#8E1119;} .m-card.kaku .m-lbl{color:#8E1119;}
+.m-card.yo  {border-left:3px solid #C01820;background:#FBEBEC;} .m-card.yo   .m-val{color:#C01820;} .m-card.yo   .m-lbl{color:#C01820;}
+.m-card.mi  {border-left:3px solid #9A9893;background:#F1EFE8;} .m-card.mi   .m-val{color:#9A9893;} .m-card.mi   .m-lbl{color:#9A9893;}
+.m-card.tg  {border-left:3px solid #CCCCCC;background:#F5F5F5;} .m-card.tg   .m-val{color:#BBBBBB;} .m-card.tg   .m-lbl{color:#BBBBBB;}
 
 /* ── 候補パネル ──────────────────────────────────────────── */
 .cand-panel{
