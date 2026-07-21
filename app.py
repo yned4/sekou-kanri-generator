@@ -1166,49 +1166,45 @@ def _render_matching():
                     unsafe_allow_html=True,
                 )
 
-                # ── 出来形 比較カード ──────────────────────────────────
+                st.markdown('</div>', unsafe_allow_html=True)
+
+                # ── 出来形 expander ────────────────────────────────────
                 new_sel_d = []
                 if len(items_d) >= 2:
-                    db_rows_d = [_lookup_db(lbl,"出来形管理") for lbl in items_d[:4]]
-                    diff_d    = _diff_cols(db_rows_d, _DISP_D)
-                    cols_c    = st.columns(min(len(items_d),4))
-                    for i,(col,lbl) in enumerate(zip(cols_c, items_d[:4])):
-                        with col:
+                    with st.expander("出来形の候補を調整", expanded=True):
+                        db_rows_d = [_lookup_db(lbl,"出来形管理") for lbl in items_d[:4]]
+                        diff_d    = _diff_cols(db_rows_d, _DISP_D)
+                        for i, lbl in enumerate(items_d[:4]):
                             parts  = [p.strip() for p in lbl.split(" / ")]
                             ctitle = " / ".join(parts[1:]) if len(parts)>1 else parts[0]
-                            is_sel = st.session_state.get(f"chk_d_{sel_idx}_{i}", False)
-                            brd    = "border:1.5px solid #C01820;background:#FBEBEC;" if is_sel else ""
                             body   = _card_html(db_rows_d[i], _DISP_D, diff_d)
+                            chk_col, det_col = st.columns([1, 3])
+                            with chk_col:
+                                if st.checkbox(f"{i+1}. {ctitle}", key=f"chk_d_{sel_idx}_{i}"):
+                                    new_sel_d.append(lbl)
+                            with det_col:
+                                st.markdown(
+                                    f'<div class="cand-card-body" style="padding:6px 0;">{body}</div>',
+                                    unsafe_allow_html=True,
+                                )
+                            st.divider()
+                        if diff_d:
                             st.markdown(
-                                f'<div class="cand-card" style="{brd}">'
-                                f'<div class="cand-card-title">{i+1}. {ctitle}</div>'
-                                f'<div class="cand-card-body">{body}</div>'
-                                f'</div>',
+                                f'<div class="cand-foot">ⓘ 差分（{"・".join(sorted(diff_d))}）をハイライト表示</div>',
                                 unsafe_allow_html=True,
                             )
-                            if st.checkbox("採用", key=f"chk_d_{sel_idx}_{i}"):
-                                new_sel_d.append(lbl)
-                    if diff_d:
-                        st.markdown(
-                            f'<div class="cand-foot">ⓘ 差分（{"・".join(sorted(diff_d))}）をハイライト表示</div>',
-                            unsafe_allow_html=True,
-                        )
                 elif len(items_d) == 1:
                     lbl    = items_d[0]
                     db_row = _lookup_db(lbl, "出来形管理")
                     parts  = [p.strip() for p in lbl.split(" / ")]
                     ctitle = " / ".join(parts[1:]) if len(parts)>1 else parts[0]
                     body   = _card_html(db_row, _DISP_D, set())
-                    st.markdown(
-                        f'<div class="cand-card" style="border:1.5px solid #C01820;background:#FBEBEC;">'
-                        f'<div class="cand-card-title">出来形基準：{ctitle}</div>'
-                        f'<div class="cand-card-body">{body}</div>'
-                        f'</div>',
-                        unsafe_allow_html=True,
-                    )
+                    with st.expander(f"出来形基準：{ctitle}", expanded=True):
+                        st.markdown(
+                            f'<div class="cand-card-body">{body}</div>',
+                            unsafe_allow_html=True,
+                        )
                     new_sel_d = items_d
-
-                st.markdown('</div>', unsafe_allow_html=True)
 
                 # 品質・撮影 expander
                 new_sel_h, new_sel_p = items_h, items_p
