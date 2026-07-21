@@ -960,16 +960,6 @@ def _render_matching():
         unsafe_allow_html=True,
     )
 
-    if n_mi > 0:
-        st.markdown(
-            f'<div style="margin:8px 0 4px;padding:10px 14px;background:#FEF3C7;'
-            f'border-left:4px solid #F59E0B;border-radius:4px;'
-            f'font-size:.84rem;color:#92400E;">'
-            f'⚠ <strong>未マッチ {n_mi} 件</strong> — DBに登録のない工種が含まれています。'
-            f'出力後に手動で追記するか、手動行追加機能をご利用ください。</div>',
-            unsafe_allow_html=True,
-        )
-
     # ── 全確定バナー（要選択がゼロになったとき） ─────────────
     if n_yo == 0 and (n_kaku > 0 or n_mi > 0):
         ok_col, go_col = st.columns([4, 1])
