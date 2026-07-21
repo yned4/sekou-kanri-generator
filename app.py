@@ -1210,7 +1210,14 @@ def _render_matching():
                 # ── 出来形 expander ────────────────────────────────────
                 new_sel_d = []
                 if len(items_d) >= 2:
-                    with st.expander("出来形の採用を確認", expanded=True):
+                    st.markdown(
+                        '<div style="display:flex;align-items:center;gap:7px;margin:8px 0 2px;">'
+                        '<div class="flow-num">1</div>'
+                        '<span style="font-size:.82rem;font-weight:600;color:#2C2C2A;">出来形の採用を確認</span>'
+                        '</div>',
+                        unsafe_allow_html=True,
+                    )
+                    with st.expander("採用する基準を選択", expanded=True):
                         db_rows_d = [_lookup_db(lbl,"出来形管理") for lbl in items_d[:4]]
                         diff_d    = _diff_cols(db_rows_d, _DISP_D)
                         for i, lbl in enumerate(items_d[:4]):
@@ -1243,6 +1250,13 @@ def _render_matching():
                     parts  = [p.strip() for p in lbl.split(" / ")]
                     ctitle = " / ".join(parts[1:]) if len(parts)>1 else parts[0]
                     body   = _card_html(db_row, _DISP_D, set())
+                    st.markdown(
+                        '<div style="display:flex;align-items:center;gap:7px;margin:8px 0 2px;">'
+                        '<div class="flow-num">1</div>'
+                        '<span style="font-size:.82rem;font-weight:600;color:#2C2C2A;">出来形の採用を確認</span>'
+                        '</div>',
+                        unsafe_allow_html=True,
+                    )
                     with st.expander(f"出来形基準：{ctitle}", expanded=True):
                         st.markdown(
                             f'<div class="cand-card-body">{body}</div>',
@@ -1253,7 +1267,14 @@ def _render_matching():
                 # 品質・撮影 expander
                 new_sel_h, new_sel_p = items_h, items_p
                 if items_h or items_p:
-                    with st.expander("品質管理・撮影箇所を確認"):
+                    st.markdown(
+                        '<div style="display:flex;align-items:center;gap:7px;margin:8px 0 2px;">'
+                        '<div class="flow-num">2</div>'
+                        '<span style="font-size:.82rem;font-weight:600;color:#2C2C2A;">品質管理・撮影箇所を確認</span>'
+                        '</div>',
+                        unsafe_allow_html=True,
+                    )
+                    with st.expander("品質管理・撮影箇所を選択", expanded=False):
                         ch,cp = st.columns(2)
                         with ch:
                             new_sel_h = []
@@ -1308,6 +1329,13 @@ def _render_matching():
                 }
 
                 # 確定アクション
+                st.markdown(
+                    '<div style="display:flex;align-items:center;gap:7px;margin:10px 0 4px;">'
+                    '<div class="flow-num">3</div>'
+                    '<span style="font-size:.82rem;font-weight:600;color:#2C2C2A;">確定</span>'
+                    '</div>',
+                    unsafe_allow_html=True,
+                )
                 st.markdown('<div style="margin-top:4px;">', unsafe_allow_html=True)
                 st.markdown('</div>', unsafe_allow_html=True)
                 confirm_col = st.container()
