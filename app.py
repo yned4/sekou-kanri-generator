@@ -843,7 +843,7 @@ def _render_structure():
     })
     sts_idx = {i: row["状態"] for i,(_,row) in enumerate(df_raw.iterrows())}
 
-    STATUS_BG2 = {"確定":"#FFFFFF","要選択":"#FBEBEC","未マッチ":"#F1EFE8","対象外":"#F5F5F5"}
+    STATUS_BG2 = {"確定":"#8E1119","要選択":"#C01820","未マッチ":"#9A9893","対象外":"#BBBBBB"}
     def _rs(sts):
         def _s(row):
             bg = STATUS_BG2.get(sts.get(row.name,""),"")
