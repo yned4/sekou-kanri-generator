@@ -1028,21 +1028,22 @@ def _render_matching():
 
     FM = {"確定のみ":"確定","要選択のみ":"要選択","未マッチのみ":"未マッチ","対象外のみ":"対象外"}
 
+    # フィルタは全幅（列の外）に配置
+    filter_opt = st.radio(
+        "filter", ["すべて","すべて（対象外除く）","要選択のみ","確定のみ","未マッチのみ","対象外のみ"],
+        horizontal=True, label_visibility="collapsed",
+    )
+    if filter_opt in FM:
+        df_v = df_raw[df_raw["状態"]==FM[filter_opt]].copy()
+    elif filter_opt == "すべて（対象外除く）":
+        df_v = df_raw[df_raw["状態"] != "対象外"].copy()
+    else:
+        df_v = df_raw.copy()
+
     left_col, right_col = st.columns([2, 3])
 
-    # ── 左：フィルタ＋テーブル ──────────────────────────────
+    # ── 左：テーブル ─────────────────────────────────────────
     with left_col:
-        filter_opt = st.radio(
-            "filter", ["すべて","すべて（対象外除く）","要選択のみ","確定のみ","未マッチのみ","対象外のみ"],
-            horizontal=True, label_visibility="collapsed",
-        )
-
-        if filter_opt in FM:
-            df_v = df_raw[df_raw["状態"]==FM[filter_opt]].copy()
-        elif filter_opt == "すべて（対象外除く）":
-            df_v = df_raw[df_raw["状態"] != "対象外"].copy()
-        else:
-            df_v = df_raw.copy()
 
         sts_idx = {i: row["状態"] for i,(_,row) in enumerate(df_v.iterrows())}
         df_tbl = pd.DataFrame({
