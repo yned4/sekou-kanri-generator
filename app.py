@@ -191,9 +191,10 @@ hr{border-color:#E5E3DC!important;}
 .m-val{font-size:2rem;font-weight:800;line-height:1;}
 .m-lbl{font-size:.70rem;font-weight:600;color:#6B6A66;
         text-transform:uppercase;letter-spacing:.07em;}
-.m-card.kaku{border-left:3px solid #8E1119;} .m-card.kaku .m-val{color:#8E1119;}
-.m-card.yo  {border-left:3px solid #C01820;} .m-card.yo   .m-val{color:#C01820;}
-.m-card.mi  {border-left:3px solid #9A9893;} .m-card.mi   .m-val{color:#9A9893;}
+.m-card.kaku{border-left:3px solid #8E1119;background:#FFFFFF;} .m-card.kaku .m-val{color:#8E1119;}
+.m-card.yo  {border-left:3px solid #C01820;background:#FBEBEC;} .m-card.yo   .m-val{color:#C01820;}
+.m-card.mi  {border-left:3px solid #9A9893;background:#F1EFE8;} .m-card.mi   .m-val{color:#9A9893;}
+.m-card.tg  {border-left:3px solid #CCCCCC;background:#F5F5F5;} .m-card.tg   .m-val{color:#999;}
 
 /* ── 候補パネル ──────────────────────────────────────────── */
 .cand-panel{
@@ -954,8 +955,8 @@ def _render_matching():
         f'<div class="m-lbl">要選択</div></div>'
         f'<div class="m-card mi"><div class="m-val">{n_mi}</div>'
         f'<div class="m-lbl">未マッチ</div></div>'
-        f'<div class="m-card" style="border-color:#CCCCCC;"><div class="m-val" style="color:#999;">{n_tg}</div>'
-        f'<div class="m-lbl" style="color:#999;">対象外</div></div>'
+        f'<div class="m-card tg"><div class="m-val">{n_tg}</div>'
+        f'<div class="m-lbl">対象外</div></div>'
         f'</div>',
         unsafe_allow_html=True,
     )
@@ -1966,8 +1967,8 @@ def _render_output():
         f'<div class="m-lbl">要選択</div></div>'
         f'<div class="m-card mi"><div class="m-val">{n_mi}</div>'
         f'<div class="m-lbl">未マッチ</div></div>'
-        f'<div class="m-card" style="border-color:#CCCCCC;"><div class="m-val" style="color:#999;">{n_tg}</div>'
-        f'<div class="m-lbl" style="color:#999;">対象外</div></div>'
+        f'<div class="m-card tg"><div class="m-val">{n_tg}</div>'
+        f'<div class="m-lbl">対象外</div></div>'
         f'</div>',
         unsafe_allow_html=True,
     )
