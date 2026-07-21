@@ -1067,16 +1067,9 @@ def _render_matching():
 
     with arrow_col:
         st.markdown(
-            '<div style="display:flex;flex-direction:column;align-items:center;'
-            'justify-content:center;height:100%;min-height:300px;gap:4px;">'
-            '<div style="width:2px;flex:1;background:linear-gradient(to bottom,transparent,#C01820);'
-            'border-radius:1px;max-height:120px;"></div>'
-            '<div style="width:36px;height:36px;border-radius:50%;background:#C01820;'
-            'display:flex;align-items:center;justify-content:center;'
-            'color:#FFF;font-size:1.1rem;font-weight:700;flex-shrink:0;">▶</div>'
-            '<div style="width:2px;flex:1;background:linear-gradient(to bottom,#C01820,transparent);'
-            'border-radius:1px;max-height:120px;"></div>'
-            '</div>',
+            '<div style="display:flex;align-items:center;justify-content:center;'
+            'height:100%;min-height:300px;font-size:2rem;color:#C01820;'
+            'font-weight:300;line-height:1;">→</div>',
             unsafe_allow_html=True,
         )
 
