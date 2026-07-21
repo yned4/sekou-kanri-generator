@@ -1158,20 +1158,6 @@ def _render_matching():
                     if _desel_p or _k not in st.session_state:
                         st.session_state[_k] = _fl in cur_p
 
-                # 進捗＋ナビ（要選択行のみ）
-                if cur_pos is not None and yo_idxs:
-                    done  = sum(1 for i in yo_idxs
-                                if _chain_key(df_raw.iloc[i]) in st.session_state.confirmed_keys)
-                    total = len(yo_idxs)
-                    prog_col, nav_col = st.columns([5, 1])
-                    with prog_col:
-                        st.progress(done/total, text=f"要選択 {total} 件中 {done} 件確認済み")
-                    with nav_col:
-                        if cur_pos < len(yo_idxs)-1:
-                            if st.button("次へ →", key="cand_next"):
-                                st.session_state.selected_idx = yo_idxs[cur_pos+1]
-                                st.rerun()
-
                 st.markdown(
                     f'<div class="cand-panel">'
                     f'<div class="cand-hdr">要確認: {sel["_name"]}'
@@ -1207,11 +1193,6 @@ def _render_matching():
                             f'<div class="cand-foot">ⓘ 差分（{"・".join(sorted(diff_d))}）をハイライト表示</div>',
                             unsafe_allow_html=True,
                         )
-                    _, _desel_d_col = st.columns([5, 1])
-                    with _desel_d_col:
-                        if st.button("全解除", key=f"desel_all_d_{sel_idx}"):
-                            st.session_state[f"_desel_d_{sel_idx}"] = True
-                            st.rerun()
                 elif len(items_d) == 1:
                     lbl    = items_d[0]
                     db_row = _lookup_db(lbl, "出来形管理")
@@ -1286,10 +1267,19 @@ def _render_matching():
                     "撮影箇所": new_sel_p,
                 }
 
-                # ── 確定して次へ ──────────────────────────────────────
-                if cur_pos is not None:
-                    btn_col, _ = st.columns([2, 5])
-                    with btn_col:
+                # ── 確定アクション ────────────────────────────────────
+                st.markdown("<div style='margin-top:12px;'>", unsafe_allow_html=True)
+                if len(items_d) >= 2:
+                    desel_col, confirm_col = st.columns([1, 3])
+                    with desel_col:
+                        if st.button("全解除", use_container_width=True, key=f"desel_all_d_{sel_idx}"):
+                            st.session_state[f"_desel_d_{sel_idx}"] = True
+                            st.rerun()
+                else:
+                    confirm_col = st.container()
+
+                with confirm_col:
+                    if cur_pos is not None:
                         if cur_pos < len(yo_idxs) - 1:
                             if st.button("確定して次へ →", type="primary",
                                          use_container_width=True, key="confirm_next_btn"):
@@ -1305,15 +1295,14 @@ def _render_matching():
                                 _auto_save_session()
                                 st.toast("すべての要選択を確認しました。④出力へ進んでください。")
                                 st.rerun()
-                elif is_sel_confirmed:
-                    btn_col, _ = st.columns([2, 5])
-                    with btn_col:
+                    elif is_sel_confirmed:
                         if st.button("確定（内容を更新）✓", type="primary",
                                      use_container_width=True, key="reconfirm_btn"):
                             st.session_state.confirmed_keys.add(ckey)
                             _auto_save_session()
                             st.toast(f"「{sel['_name']}」の内容を更新しました")
                             st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
 
                 if items_d:
                     fd = items_d[0].split(" / ")[0]
