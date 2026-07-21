@@ -213,6 +213,20 @@ hr{border-color:#E5E3DC!important;}
 }
 .cand-foot{font-size:.72rem;color:#9A9893;margin-top:10px;}
 
+/* ── 候補パネル内ステップフロー ─────────────────────────── */
+.flow-bar{display:flex;align-items:center;gap:6px;margin-bottom:14px;}
+.flow-step{display:flex;align-items:center;gap:5px;color:#9A9893;font-size:.74rem;}
+.flow-num{
+    width:20px;height:20px;border-radius:50%;
+    background:#E5E3DC;color:#6B6A66;
+    display:flex;align-items:center;justify-content:center;
+    font-weight:700;font-size:.70rem;flex-shrink:0;
+}
+.flow-lbl{white-space:nowrap;}
+.flow-arrow{color:#D1CFC8;font-size:.80rem;flex-shrink:0;}
+.flow-step.primary .flow-num{background:#C01820;color:#FFF;}
+.flow-step.primary .flow-lbl{color:#2C2C2A;font-weight:600;}
+
 /* ── 凡例 ────────────────────────────────────────────────── */
 .legend{display:flex;gap:14px;font-size:.73rem;color:#6B6A66;
         align-items:center;margin-top:6px;}
@@ -1170,18 +1184,25 @@ def _render_matching():
 
                 st.markdown(
                     f'<div class="cand-panel">'
-                    f'<div class="cand-hdr">要確認: {sel["_name"]}'
+                    f'<div class="cand-hdr">{sel["_name"]}'
                     f'<span style="font-weight:400;font-size:.76rem;margin-left:8px;">{chain}</span>'
+                    f'</div>'
+                    f'<div class="flow-bar">'
+                    f'<div class="flow-step primary"><div class="flow-num">1</div><div class="flow-lbl">出来形</div></div>'
+                    f'<div class="flow-arrow">→</div>'
+                    f'<div class="flow-step primary"><div class="flow-num">2</div><div class="flow-lbl">品質・撮影</div></div>'
+                    f'<div class="flow-arrow">→</div>'
+                    f'<div class="flow-step primary"><div class="flow-num">3</div><div class="flow-lbl">確定</div></div>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
 
                 st.markdown('</div>', unsafe_allow_html=True)
 
-                # ── ① 出来形 expander ─────────────────────────────────
+                # ── 出来形 expander ────────────────────────────────────
                 new_sel_d = []
                 if len(items_d) >= 2:
-                    with st.expander("① 出来形の採用を確認", expanded=True):
+                    with st.expander("出来形の採用を確認", expanded=True):
                         db_rows_d = [_lookup_db(lbl,"出来形管理") for lbl in items_d[:4]]
                         diff_d    = _diff_cols(db_rows_d, _DISP_D)
                         for i, lbl in enumerate(items_d[:4]):
@@ -1214,17 +1235,17 @@ def _render_matching():
                     parts  = [p.strip() for p in lbl.split(" / ")]
                     ctitle = " / ".join(parts[1:]) if len(parts)>1 else parts[0]
                     body   = _card_html(db_row, _DISP_D, set())
-                    with st.expander(f"① 出来形基準：{ctitle}", expanded=True):
+                    with st.expander(f"出来形基準：{ctitle}", expanded=True):
                         st.markdown(
                             f'<div class="cand-card-body">{body}</div>',
                             unsafe_allow_html=True,
                         )
                     new_sel_d = items_d
 
-                # ── ② 品質・撮影 expander ─────────────────────────────
+                # 品質・撮影 expander
                 new_sel_h, new_sel_p = items_h, items_p
                 if items_h or items_p:
-                    with st.expander("② 品質管理・撮影箇所を確認"):
+                    with st.expander("品質管理・撮影箇所を確認"):
                         ch,cp = st.columns(2)
                         with ch:
                             new_sel_h = []
@@ -1278,14 +1299,9 @@ def _render_matching():
                     "撮影箇所": new_sel_p,
                 }
 
-                # ── ③ 確定アクション ──────────────────────────────────
-                st.markdown(
-                    '<div style="margin-top:16px;padding-top:12px;'
-                    'border-top:2px solid #E5E3DC;font-size:.72rem;'
-                    'font-weight:700;color:#9A9893;letter-spacing:.08em;'
-                    'margin-bottom:6px;">③ 確定</div>',
-                    unsafe_allow_html=True,
-                )
+                # 確定アクション
+                st.markdown('<div style="margin-top:4px;">', unsafe_allow_html=True)
+                st.markdown('</div>', unsafe_allow_html=True)
                 confirm_col = st.container()
 
                 with confirm_col:
