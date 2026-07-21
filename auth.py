@@ -85,24 +85,27 @@ def authenticate(username: str, password: str) -> dict | None:
     client = _client()
     if client is None:
         return None
-    res = (
-        client.table("users")
-        .select("id, username, display_name, password_hash, role")
-        .eq("username", username)
-        .limit(1)
-        .execute()
-    )
-    if not res.data:
+    try:
+        res = (
+            client.table("users")
+            .select("id, username, display_name, password_hash, role")
+            .eq("username", username)
+            .limit(1)
+            .execute()
+        )
+        if not res.data:
+            return None
+        user = res.data[0]
+        if not _verify_password(password, user["password_hash"]):
+            return None
+        return {
+            "id": user["id"],
+            "username": user["username"],
+            "display_name": user["display_name"],
+            "role": user["role"],
+        }
+    except Exception:
         return None
-    user = res.data[0]
-    if not _verify_password(password, user["password_hash"]):
-        return None
-    return {
-        "id": user["id"],
-        "username": user["username"],
-        "display_name": user["display_name"],
-        "role": user["role"],
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -114,13 +117,16 @@ def list_users() -> list[dict]:
     client = _client()
     if client is None:
         return []
-    res = (
-        client.table("users")
-        .select("id, username, display_name, role, created_at")
-        .order("created_at")
-        .execute()
-    )
-    return res.data
+    try:
+        res = (
+            client.table("users")
+            .select("id, username, display_name, role, created_at")
+            .order("created_at")
+            .execute()
+        )
+        return res.data
+    except Exception:
+        return []
 
 
 def create_user(username: str, display_name: str, password: str, role: str) -> bool:
@@ -190,13 +196,16 @@ def get_accessible_project_ids(user_id: str) -> list[str]:
     client = _client()
     if client is None:
         return []
-    res = (
-        client.table("project_permissions")
-        .select("project_id")
-        .eq("user_id", user_id)
-        .execute()
-    )
-    return [r["project_id"] for r in res.data]
+    try:
+        res = (
+            client.table("project_permissions")
+            .select("project_id")
+            .eq("user_id", user_id)
+            .execute()
+        )
+        return [r["project_id"] for r in res.data]
+    except Exception:
+        return []
 
 
 def get_project_permissions(project_id: str) -> list[dict]:
@@ -204,13 +213,16 @@ def get_project_permissions(project_id: str) -> list[dict]:
     client = _client()
     if client is None:
         return []
-    res = (
-        client.table("project_permissions")
-        .select("user_id, users(username, display_name, role)")
-        .eq("project_id", project_id)
-        .execute()
-    )
-    return res.data
+    try:
+        res = (
+            client.table("project_permissions")
+            .select("user_id, users(username, display_name, role)")
+            .eq("project_id", project_id)
+            .execute()
+        )
+        return res.data
+    except Exception:
+        return []
 
 
 def add_permission(user_id: str, project_id: str) -> bool:
