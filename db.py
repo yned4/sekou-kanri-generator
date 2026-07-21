@@ -76,7 +76,10 @@ def save_project(kojyo_name: str, sheets: dict[str, pd.DataFrame]) -> None:
         "kojyo_name": kojyo_name,
         "sheets": _dfs_to_json(sheets),
     }
-    client.table("projects").upsert(payload, on_conflict="kojyo_name").execute()
+    try:
+        client.table("projects").upsert(payload, on_conflict="kojyo_name").execute()
+    except Exception:
+        pass
 
 
 def load_project(kojyo_name: str) -> dict[str, pd.DataFrame] | None:
@@ -84,15 +87,18 @@ def load_project(kojyo_name: str) -> dict[str, pd.DataFrame] | None:
     client = _client()
     if client is None:
         return None
-    res = (
-        client.table("projects")
-        .select("sheets")
-        .eq("kojyo_name", kojyo_name)
-        .limit(1)
-        .execute()
-    )
-    if res.data:
-        return _json_to_dfs(res.data[0]["sheets"])
+    try:
+        res = (
+            client.table("projects")
+            .select("sheets")
+            .eq("kojyo_name", kojyo_name)
+            .limit(1)
+            .execute()
+        )
+        if res.data:
+            return _json_to_dfs(res.data[0]["sheets"])
+    except Exception:
+        pass
     return None
 
 
@@ -148,7 +154,10 @@ def delete_project(kojyo_name: str) -> None:
     client = _client()
     if client is None:
         return
-    client.table("projects").delete().eq("kojyo_name", kojyo_name).execute()
+    try:
+        client.table("projects").delete().eq("kojyo_name", kojyo_name).execute()
+    except Exception:
+        pass
 
 
 def rename_project(old_name: str, new_name: str) -> bool:
@@ -168,15 +177,18 @@ def get_project_id(kojyo_name: str) -> str | None:
     client = _client()
     if client is None:
         return None
-    res = (
-        client.table("projects")
-        .select("id")
-        .eq("kojyo_name", kojyo_name)
-        .limit(1)
-        .execute()
-    )
-    if res.data:
-        return res.data[0]["id"]
+    try:
+        res = (
+            client.table("projects")
+            .select("id")
+            .eq("kojyo_name", kojyo_name)
+            .limit(1)
+            .execute()
+        )
+        if res.data:
+            return res.data[0]["id"]
+    except Exception:
+        pass
     return None
 
 
