@@ -433,6 +433,18 @@ def _group_items(items):
         )
     return g
 
+def _confirmed_h_labels(current_ckey=None) -> set:
+    """他の確定済み行で選ばれた品質管理ラベルのセットを返す。"""
+    confirmed_keys = st.session_state.get("confirmed_keys", set())
+    row_selections = st.session_state.get("row_selections", {})
+    result = set()
+    for k in confirmed_keys:
+        if k == current_ckey:
+            continue
+        for lbl in row_selections.get(k, {}).get("品質管理", []):
+            result.add(lbl)
+    return result
+
 def _deepest_name(row):
     for col in reversed(SURYO_LEVEL_COLS):
         v = row.get(col,"")
@@ -981,6 +993,8 @@ def _render_matching():
                             all_d = [x.strip() for x in str(row.get("出来形マッチ","")).split("\n") if x.strip()]
                             all_h = [x.strip() for x in str(row.get("品質管理マッチ","")).split("\n") if x.strip()]
                             all_p = [x.strip() for x in str(row.get("撮影箇所マッチ","")).split("\n") if x.strip()]
+                            # 他の確定済み行で使用済みのラベルを除外
+                            all_h = [x for x in all_h if x not in _confirmed_h_labels(k)]
                             st.session_state.row_selections[k] = {"出来形": all_d, "品質管理": all_h, "撮影箇所": all_p}
                     st.toast("要選択をすべて確定しました")
                     st.rerun()
@@ -1088,6 +1102,9 @@ def _render_matching():
         items_d = [x.strip() for x in str(sel.get("出来形マッチ","")).split("\n") if x.strip()]
         items_h = [x.strip() for x in str(sel.get("品質管理マッチ","")).split("\n") if x.strip()]
         items_p = [x.strip() for x in str(sel.get("撮影箇所マッチ","")).split("\n") if x.strip()]
+        # 他の確定済み行で選ばれた品質管理ラベルは候補から除外
+        _conf_h = _confirmed_h_labels(ckey)
+        items_h = [x for x in items_h if x not in _conf_h]
 
         if not items_d and not items_h and not items_p:
             st.markdown(
