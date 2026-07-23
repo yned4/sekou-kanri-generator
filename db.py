@@ -67,19 +67,25 @@ def _json_to_dfs(raw: dict) -> dict[str, pd.DataFrame]:
 # CRUD
 # ---------------------------------------------------------------------------
 
-def save_project(kojyo_name: str, sheets: dict[str, pd.DataFrame]) -> None:
-    """プロジェクトを保存（存在すれば上書き）。"""
+def save_project(kojyo_name: str, sheets: dict[str, pd.DataFrame]) -> bool:
+    """プロジェクトを保存（存在すれば上書き）。成功なら True。"""
     client = _client()
     if client is None:
-        return
+        return False
+    from datetime import datetime, timezone
     payload = {
         "kojyo_name": kojyo_name,
         "sheets": _dfs_to_json(sheets),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     try:
         client.table("projects").upsert(payload, on_conflict="kojyo_name").execute()
-    except Exception:
-        pass
+        return True
+    except Exception as e:
+        import traceback
+        st.warning(f"⚠ プロジェクト保存エラー: {e}")
+        st.code(traceback.format_exc())
+        return False
 
 
 def load_project(kojyo_name: str) -> dict[str, pd.DataFrame] | None:

@@ -2136,17 +2136,24 @@ def _render_output():
                                                 else "施工管理計画.xlsx")
                 st.session_state.project_sheets = dfs
                 st.session_state.pm_editing = proj_name  # 編集ページ用に保持
+                _saved_ok = False
                 if db.is_available():
-                    db.save_project(proj_name, dfs)
-                    # 出力完了 → 作業セッションを削除
-                    _u_out = st.session_state.get("current_user")
-                    db.delete_session(proj_name, _u_out["id"] if _u_out else None)
-                    # 非adminユーザーが作成した場合、自動で閲覧権限を付与
-                    if _current_user and not _is_admin:
-                        _pid = db.get_project_id(proj_name)
-                        if _pid:
-                            auth.add_permission(_current_user["id"], _pid)
-                st.success("生成完了！ダウンロードボタンからファイルを取得してください。「プロジェクト管理」で内容を編集できます。")
+                    _saved_ok = db.save_project(proj_name, dfs)
+                    if _saved_ok:
+                        # 出力完了 → 作業セッションを削除
+                        _u_out = st.session_state.get("current_user")
+                        db.delete_session(proj_name, _u_out["id"] if _u_out else None)
+                        # 非adminユーザーが作成した場合、自動で閲覧権限を付与
+                        if _current_user and not _is_admin:
+                            _pid = db.get_project_id(proj_name)
+                            if _pid:
+                                auth.add_permission(_current_user["id"], _pid)
+                if _saved_ok:
+                    st.success("生成完了！ダウンロードボタンからファイルを取得してください。「プロジェクト管理」で内容を編集できます。")
+                elif db.is_available():
+                    st.warning("Excel生成は完了しましたが、プロジェクト管理への保存に失敗しました。ダウンロードは可能です。")
+                else:
+                    st.success("生成完了！ダウンロードボタンからファイルを取得してください。（Supabase未接続のためプロジェクト管理には保存されていません）")
                 st.rerun()
             except Exception:
                 st.error("生成エラー")
